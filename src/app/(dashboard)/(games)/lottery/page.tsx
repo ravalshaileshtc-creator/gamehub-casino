@@ -10,7 +10,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { db } from '@/lib/firebase'
 import { doc, setDoc } from 'firebase/firestore'
 
-export type BetType = 'SINGLE' | 'EVEN' | 'ODD' | 'LOW' | 'HIGH'
+export type BetType = 'SINGLE' | 'RANGE_1_5' | 'RANGE_6_9' | 'ZERO_FIVE'
 
 interface BetOption {
   type: BetType
@@ -21,11 +21,10 @@ interface BetOption {
 }
 
 const BET_TYPES_CONFIG: Record<BetType, BetOption> = {
-  SINGLE: { type: 'SINGLE', label: 'SINGLE NUMBER', multiplier: 9.0, description: 'Select 1 number (0-9)', numbers: [] },
-  EVEN: { type: 'EVEN', label: 'EVEN (BEKI)', multiplier: 1.9, description: '0, 2, 4, 6, 8', numbers: [0, 2, 4, 6, 8] },
-  ODD: { type: 'ODD', label: 'ODD', multiplier: 1.9, description: '1, 3, 5, 7, 9', numbers: [1, 3, 5, 7, 9] },
-  LOW: { type: 'LOW', label: 'LOW (0-5)', multiplier: 1.5, description: '0, 1, 2, 3, 4, 5', numbers: [0, 1, 2, 3, 4, 5] },
-  HIGH: { type: 'HIGH', label: 'HIGH (6-9)', multiplier: 2.25, description: '6, 7, 8, 9', numbers: [6, 7, 8, 9] },
+  SINGLE: { type: 'SINGLE', label: 'SINGLE (0-9)', multiplier: 9.0, description: 'Select 1 number (0-9)', numbers: [] },
+  RANGE_1_5: { type: 'RANGE_1_5', label: '1 - 5 RANGE', multiplier: 1.8, description: 'Numbers 1, 2, 3, 4, 5', numbers: [1, 2, 3, 4, 5] },
+  RANGE_6_9: { type: 'RANGE_6_9', label: '6 - 9 RANGE', multiplier: 2.25, description: 'Numbers 6, 7, 8, 9', numbers: [6, 7, 8, 9] },
+  ZERO_FIVE: { type: 'ZERO_FIVE', label: '0 / 5 BET', multiplier: 4.5, description: 'Numbers 0 or 5', numbers: [0, 5] },
 }
 
 // Evolution / Stake Style Two-Color Metallic Ball System
@@ -421,18 +420,15 @@ export default function RealisticLuckyBallGame() {
       if (b.betType === 'SINGLE' && b.selectedNumber === winNum) {
         won = true
         mult = 9.0
-      } else if (b.betType === 'EVEN' && winNum % 2 === 0) {
+      } else if (b.betType === 'RANGE_1_5' && winNum >= 1 && winNum <= 5) {
         won = true
-        mult = 1.9
-      } else if (b.betType === 'ODD' && winNum % 2 !== 0) {
-        won = true
-        mult = 1.9
-      } else if (b.betType === 'LOW' && winNum >= 0 && winNum <= 5) {
-        won = true
-        mult = 1.5
-      } else if (b.betType === 'HIGH' && winNum >= 6 && winNum <= 9) {
+        mult = 1.8
+      } else if (b.betType === 'RANGE_6_9' && winNum >= 6 && winNum <= 9) {
         won = true
         mult = 2.25
+      } else if (b.betType === 'ZERO_FIVE' && (winNum === 0 || winNum === 5)) {
+        won = true
+        mult = 4.5
       }
 
       if (won) {
@@ -640,8 +636,8 @@ export default function RealisticLuckyBallGame() {
         </AnimatePresence>
       </div>
 
-      {/* Bet Type Category Tabs */}
-      <div className="grid grid-cols-5 gap-1 shrink-0 my-0.5">
+      {/* Bet Type Category Tabs (4 Clean Categories) */}
+      <div className="grid grid-cols-4 gap-1 shrink-0 my-0.5">
         {(Object.keys(BET_TYPES_CONFIG) as BetType[]).map(bt => {
           const cfg = BET_TYPES_CONFIG[bt]
           const isSelected = selectedBetType === bt
@@ -650,14 +646,14 @@ export default function RealisticLuckyBallGame() {
               key={bt}
               disabled={phase !== 'BETTING' || timeLeft <= 5}
               onClick={() => { haptics.light(); setSelectedBetType(bt); }}
-              className={`py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border transition-all touch-spring ${
+              className={`py-2 rounded-xl text-[9px] font-black uppercase tracking-wider border transition-all touch-spring ${
                 isSelected
                   ? 'bg-[#F7B500] text-black border-[#F7B500] shadow-[0_0_12px_rgba(247,181,0,0.7)] font-black scale-95'
-                  : 'bg-[#121826] text-gray-400 border-white/5 hover:text-white disabled:opacity-50'
+                  : 'bg-[#121826] text-gray-300 border-white/10 hover:text-white disabled:opacity-50'
               }`}
             >
-              <div>{cfg.type}</div>
-              <div className="text-[8px] opacity-80 font-mono">{cfg.multiplier}x</div>
+              <div className="font-bold truncate px-0.5">{cfg.label}</div>
+              <div className="text-[9px] opacity-90 font-mono font-black">{cfg.multiplier}x</div>
             </button>
           )
         })}
