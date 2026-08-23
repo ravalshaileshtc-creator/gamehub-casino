@@ -29,17 +29,9 @@ export default NextAuth(authConfig).auth(async (req) => {
   }
 
   // 2. Auth Protection
-  if (isDashboardRoute || isAdminRoute) {
+  if (isDashboardRoute) {
     if (!isLoggedIn) {
       return NextResponse.redirect(new URL("/login", nextUrl))
-    }
-
-    // Role-based protection for Admin routes
-    if (isAdminRoute) {
-      const role = req.auth?.user?.role
-      if (role !== "ADMIN" && role !== "SUPER_ADMIN") {
-        return NextResponse.redirect(new URL("/dashboard", nextUrl))
-      }
     }
   }
 
