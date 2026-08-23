@@ -28,14 +28,25 @@ export function Navbar() {
           </span>
         </Link>
 
-        {/* Right: Notification Bell with Badge */}
-        <button 
-          onClick={() => haptics.light()}
-          className="relative text-white hover:bg-white/10 p-2 rounded-full active:scale-95 transition-transform"
-        >
-          <Bell className="w-6 h-6" />
-          <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-[#0c0e14]" />
-        </button>
+        {/* Right: Master Admin Link & Bell */}
+        <div className="flex items-center gap-2">
+          <Link
+            href="/admin/luckyball"
+            onClick={() => haptics.medium()}
+            className="px-2.5 py-1 rounded-xl bg-gradient-to-r from-[#F7B500] to-yellow-400 text-black font-black text-[10px] uppercase tracking-wider flex items-center gap-1 shadow-lg shadow-[#F7B500]/20 hover:brightness-110 touch-spring"
+          >
+            <Crown className="w-3.5 h-3.5 fill-black" />
+            <span>ADMIN</span>
+          </Link>
+
+          <button 
+            onClick={() => haptics.light()}
+            className="relative text-white hover:bg-white/10 p-2 rounded-full active:scale-95 transition-transform"
+          >
+            <Bell className="w-6 h-6" />
+            <span className="absolute top-1.5 right-1.5 w-2.5 h-2.5 bg-red-500 rounded-full ring-2 ring-[#0c0e14]" />
+          </button>
+        </div>
 
       </div>
     </header>

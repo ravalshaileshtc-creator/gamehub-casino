@@ -54,7 +54,8 @@ const navigation: NavItem[] = [
 ]
 
 const adminNavigation: NavItem[] = [
-  { name: 'Overview', href: '/admin', icon: Home }, // Using Home as Overview
+  { name: 'Overview', href: '/admin', icon: Home },
+  { name: '👑 Lucky Ball Control', href: '/admin/luckyball', icon: Shield },
   { name: 'Users', href: '/admin/users', icon: User },
   { name: 'Games', href: '/admin/games', icon: Gamepad2 },
   { name: 'Finance', href: '/admin/finance', icon: DollarSign },
@@ -89,10 +90,7 @@ export default function Sidebar({ items }: SidebarProps) {
     }
   }, [pathname])
 
-  // Filter out Admin link for non-admins if using default navigation
-  const filteredNavigation = navigation.filter(item => 
-    item.name !== 'Admin' || session?.user?.role === 'ADMIN'
-  )
+  const filteredNavigation = navigation
 
   const currentNav = items || (pathname?.startsWith('/admin') ? adminNavigation : filteredNavigation)
 
