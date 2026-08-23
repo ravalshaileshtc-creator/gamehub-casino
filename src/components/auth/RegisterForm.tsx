@@ -9,6 +9,9 @@ import { Loader2, Eye, EyeOff } from "lucide-react"
 import { motion } from "framer-motion"
 import { AuthLayout } from "./AuthLayout"
 
+import { db } from "@/lib/firebase"
+import { doc, setDoc } from "firebase/firestore"
+
 export function RegisterForm() {
   const router = useRouter()
   const [name, setName] = useState("")
@@ -24,6 +27,17 @@ export function RegisterForm() {
     setError("")
 
     try {
+      const docId = email.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, "_")
+      const userRef = doc(db, "users", docId)
+      await setDoc(userRef, {
+        name,
+        email,
+        createdAt: new Date().toISOString(),
+        platform: "GameHub Android/Web APK",
+        status: "ACTIVE",
+        role: "PLAYER"
+      }, { merge: true })
+
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

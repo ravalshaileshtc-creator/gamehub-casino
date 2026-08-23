@@ -11,6 +11,9 @@ import { Loader2, Eye, EyeOff, Zap } from "lucide-react"
 import { motion } from "framer-motion"
 import { AuthLayout } from "./AuthLayout"
 
+import { db } from "@/lib/firebase"
+import { doc, setDoc } from "firebase/firestore"
+
 export function LoginForm() {
   const router = useRouter()
   const [email, setEmail] = useState("")
@@ -19,12 +22,30 @@ export function LoginForm() {
   const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
 
+  const syncUserToFirebase = async (userEmail: string) => {
+    try {
+      const docId = userEmail.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, "_")
+      const userRef = doc(db, "users", docId)
+      await setDoc(userRef, {
+        email: userEmail,
+        lastLoginAt: new Date().toISOString(),
+        platform: "GameHub Android/Web APK",
+        status: "ACTIVE",
+        role: "PLAYER"
+      }, { merge: true })
+    } catch (err) {
+      console.warn("Firebase Firestore Sync Note:", err)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
     setError("")
 
     try {
+      await syncUserToFirebase(email)
+
       const result = await signIn("credentials", {
         redirect: false,
         email,
@@ -46,13 +67,16 @@ export function LoginForm() {
   const handleDemoLogin = async () => {
     setIsLoading(true)
     setError("")
-    setEmail("demo@gambling.com")
+    const demoEmail = "demo@gambling.com"
+    setEmail(demoEmail)
     setPassword("Demo123!")
 
     try {
+      await syncUserToFirebase(demoEmail)
+
       const result = await signIn("credentials", {
         redirect: false,
-        email: "demo@gambling.com",
+        email: demoEmail,
         password: "Demo123!",
       })
 
