@@ -488,7 +488,7 @@ export default function RealisticLuckyBallGame() {
 
   // Place Bet
   const placeBet = async () => {
-    if (phase !== 'BETTING' || isBetLocked) return
+    if (phase !== 'BETTING' || timeLeft <= 5 || isBetLocked) return
     if (wager <= 0) return
 
     setIsBetLocked(true)
@@ -648,7 +648,7 @@ export default function RealisticLuckyBallGame() {
           return (
             <button
               key={bt}
-              disabled={phase !== 'BETTING'}
+              disabled={phase !== 'BETTING' || timeLeft <= 5}
               onClick={() => { haptics.light(); setSelectedBetType(bt); }}
               className={`py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border transition-all touch-spring ${
                 isSelected
@@ -677,7 +677,7 @@ export default function RealisticLuckyBallGame() {
               return (
                 <button
                   key={num}
-                  disabled={phase !== 'BETTING'}
+                  disabled={phase !== 'BETTING' || timeLeft <= 5}
                   onClick={() => { haptics.light(); setSelectedSingleNumber(num); }}
                   className={`h-9 rounded-xl font-black text-xs transition-all touch-spring border flex items-center justify-center relative overflow-hidden ${
                     isSelected
@@ -759,15 +759,17 @@ export default function RealisticLuckyBallGame() {
 
         <button
           onClick={placeBet}
-          disabled={phase !== 'BETTING' || isBetLocked}
+          disabled={phase !== 'BETTING' || timeLeft <= 5 || isBetLocked}
           className={`w-full py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-transform active:scale-95 touch-spring cursor-pointer shadow-xl ${
-            phase !== 'BETTING' || isBetLocked
+            phase !== 'BETTING' || timeLeft <= 5 || isBetLocked
               ? 'bg-zinc-800 text-gray-400 cursor-not-allowed border border-[#F7B500]/20 opacity-75'
               : 'bg-gradient-to-r from-[#F7B500] via-yellow-400 to-[#F7B500] text-black shadow-[0_0_20px_rgba(247,181,0,0.4)] hover:brightness-110'
           }`}
         >
           {phase !== 'BETTING' ? (
             `⏳ DRAWING IN PROGRESS...`
+          ) : timeLeft <= 5 ? (
+            `🔒 BETS CLOSED (LAST 5s)`
           ) : isBetLocked ? (
             `🔒 BET CONFIRMED (LOCK 2s)`
           ) : (
