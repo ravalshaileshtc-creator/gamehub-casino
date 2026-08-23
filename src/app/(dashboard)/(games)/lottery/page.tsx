@@ -1,459 +1,599 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import Link from 'next/link'
+import { ArrowLeft, Volume2, VolumeX, Minus, Plus, Trophy, Sparkles, RefreshCw, Zap, Users, Flame } from 'lucide-react'
 import { useWallet } from '@/context/WalletContext'
-import { Sparkles, Volume2, VolumeX, Ticket, Dices, RefreshCw } from 'lucide-react'
 import { haptics } from '@/lib/haptics'
+import { playSound } from '@/lib/sounds'
+import { motion, AnimatePresence } from 'framer-motion'
+import { db } from '@/lib/firebase'
+import { doc, setDoc } from 'firebase/firestore'
 
-interface Ball {
+// Single Number Lucky Ball Configuration (0-9)
+export type BetType = 'SINGLE' | 'EVEN' | 'ODD' | 'LOW' | 'HIGH'
+
+interface BetOption {
+  type: BetType
+  label: string
+  multiplier: number
+  description: string
+  numbers: number[]
+}
+
+const BET_TYPES_CONFIG: Record<BetType, BetOption> = {
+  SINGLE: { type: 'SINGLE', label: 'SINGLE NUMBER', multiplier: 9.0, description: 'Select 1 number (0-9)', numbers: [] },
+  EVEN: { type: 'EVEN', label: 'EVEN (BEKI)', multiplier: 1.9, description: '0, 2, 4, 6, 8', numbers: [0, 2, 4, 6, 8] },
+  ODD: { type: 'ODD', label: 'ODD', multiplier: 1.9, description: '1, 3, 5, 7, 9', numbers: [1, 3, 5, 7, 9] },
+  LOW: { type: 'LOW', label: 'LOW (0-5)', multiplier: 1.5, description: '0, 1, 2, 3, 4, 5', numbers: [0, 1, 2, 3, 4, 5] },
+  HIGH: { type: 'HIGH', label: 'HIGH (6-9)', multiplier: 2.25, description: '6, 7, 8, 9', numbers: [6, 7, 8, 9] },
+}
+
+const BALL_PALETTE = [
+  '#ef4444', // 0 Red
+  '#3b82f6', // 1 Blue
+  '#22c55e', // 2 Green
+  '#f97316', // 3 Orange
+  '#a855f7', // 4 Purple
+  '#ec4899', // 5 Pink
+  '#06b6d4', // 6 Cyan
+  '#eab308', // 7 Gold
+  '#10b981', // 8 Emerald
+  '#f43f5e', // 9 Rose
+]
+
+interface Ball3D {
+  num: number
   x: number
   y: number
   vx: number
   vy: number
-  num: number
   color: string
   radius: number
 }
 
-interface LotteryResult {
+interface ActiveBet {
   id: string
-  drawn: number[]
-  picked: number[]
-  matches: number
-  payout: number
-  wager: number
-  multiplier: number
-  mode: '4DIGIT' | 'MEGA6'
+  betType: BetType
+  selectedNumber: number | null
+  amount: number
+  roundId: number
 }
 
-const BALL_COLORS = ['#ef4444', '#f97316', '#fbbf24', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899']
+type RoundPhase = 'BETTING' | 'DRAWING' | 'RESULT'
 
-export default function LotterySphereGame() {
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const { balance, debit, credit } = useWallet()
+export default function SingleNumberLuckyBallGame() {
+  const { balance, debit, credit, addDemoCoins } = useWallet()
 
-  const [mode, setMode] = useState<'4DIGIT' | 'MEGA6'>('4DIGIT')
-  const [wager, setWager] = useState(10)
-  const [selectedNumbers, setSelectedNumbers] = useState<number[]>([1, 4, 7, 9])
-  const [drawing, setDrawing] = useState(false)
-  const [drawnNumbers, setDrawnNumbers] = useState<number[]>([])
-  const [suctionBall, setSuctionBall] = useState<number | null>(null)
-  const [lastResult, setLastResult] = useState<LotteryResult | null>(null)
-  const [history, setHistory] = useState<LotteryResult[]>([])
+  // Game Engine State
+  const [roundId, setRoundId] = useState(8842)
+  const [phase, setPhase] = useState<RoundPhase>('BETTING')
+  const [timeLeft, setTimeLeft] = useState(30) // 30s Betting phase
+  const [winningNumber, setWinningNumber] = useState<number | null>(null)
+  const [history, setHistory] = useState<number[]>([7, 2, 9, 0, 4, 1, 8])
+
+  // Player Bet Controls
+  const [selectedBetType, setSelectedBetType] = useState<BetType>('SINGLE')
+  const [selectedSingleNumber, setSelectedSingleNumber] = useState<number>(7)
+  const [wager, setWager] = useState<number>(100)
+  const [myBets, setMyBets] = useState<ActiveBet[]>([])
   const [soundEnabled, setSoundEnabled] = useState(true)
 
-  const maxNumbers = mode === '4DIGIT' ? 4 : 6
-  const numberRange = mode === '4DIGIT' ? 10 : 49
+  // Live Stats
+  const [livePlayers] = useState(148)
+  const [totalPool, setTotalPool] = useState(45280)
+  const [lastWinAnnouncement, setLastWinAnnouncement] = useState<{ isWin: boolean; payout: number; msg: string } | null>(null)
 
-  const handleModeChange = (newMode: '4DIGIT' | 'MEGA6') => {
-    haptics.light()
-    setMode(newMode)
-    setDrawnNumbers([])
-    setLastResult(null)
-    if (newMode === '4DIGIT') {
-      setSelectedNumbers([1, 4, 7, 9])
-    } else {
-      setSelectedNumbers([5, 12, 23, 34, 41, 48])
-    }
-  }
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const ballsRef = useRef<Ball3D[]>([])
+  const animRef = useRef<number | null>(null)
 
-  const playSound = (type: 'mix' | 'suck' | 'match' | 'jackpot' | 'loss') => {
-    if (!soundEnabled) return
-    try {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext
-      if (!AudioCtx) return
-      const ctx = new AudioCtx()
-      const now = ctx.currentTime
-
-      if (type === 'mix') {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.type = 'triangle'
-        osc.frequency.setValueAtTime(300 + Math.random() * 200, now)
-        gain.gain.setValueAtTime(0.04, now)
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.08)
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.start(now)
-        osc.stop(now + 0.08)
-      } else if (type === 'suck') {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(400, now)
-        osc.frequency.exponentialRampToValueAtTime(1200, now + 0.3)
-        gain.gain.setValueAtTime(0.2, now)
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3)
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.start(now)
-        osc.stop(now + 0.3)
-      } else if (type === 'match') {
-        const osc = ctx.createOscillator()
-        const gain = ctx.createGain()
-        osc.type = 'sine'
-        osc.frequency.setValueAtTime(523.25, now)
-        osc.frequency.setValueAtTime(659.25, now + 0.08)
-        gain.gain.setValueAtTime(0.3, now)
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25)
-        osc.connect(gain)
-        gain.connect(ctx.destination)
-        osc.start(now)
-        osc.stop(now + 0.25)
-      }
-    } catch {}
-  }
-
-  // 3D Bouncing Physics Engine in Glass Tumbler
+  // Initialize 10 Bouncing Balls (0-9) inside pneumatic chamber
   useEffect(() => {
+    const balls: Ball3D[] = []
+    for (let i = 0; i <= 9; i++) {
+      balls.push({
+        num: i,
+        x: Math.random() * 180 + 30,
+        y: Math.random() * 180 + 30,
+        vx: (Math.random() - 0.5) * 6,
+        vy: (Math.random() - 0.5) * 6,
+        color: BALL_PALETTE[i],
+        radius: 13
+      })
+    }
+    ballsRef.current = balls
+  }, [])
+
+  // 60 FPS HTML5 Canvas Pneumatic Sphere Tumbler Physics
+  const drawTumbler = useCallback((isDrawingPhase: boolean, drawnNum: number | null) => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
-    let animId: number
-    const ballCount = mode === '4DIGIT' ? 20 : 35
-    const balls: Ball[] = []
-    const centerX = canvas.width / 2
-    const centerY = canvas.height / 2 + 10
-    const globeRadius = 100
+    const size = Math.min(canvas.parentElement?.clientWidth || 280, 280)
+    canvas.width = size * 2
+    canvas.height = size * 2
+    ctx.scale(2, 2)
 
-    for (let i = 0; i < ballCount; i++) {
-      const angle = Math.random() * Math.PI * 2
-      const dist = Math.random() * (globeRadius - 20)
-      balls.push({
-        x: centerX + Math.cos(angle) * dist,
-        y: centerY + Math.sin(angle) * dist,
-        vx: (Math.random() - 0.5) * 4,
-        vy: (Math.random() - 0.5) * 4,
-        num: mode === '4DIGIT' ? Math.floor(Math.random() * 10) : Math.floor(Math.random() * 49) + 1,
-        color: BALL_COLORS[i % BALL_COLORS.length],
-        radius: 8,
-      })
-    }
+    const cx = size / 2
+    const cy = size / 2 + 10
+    const radius = size * 0.40
 
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+    ctx.clearRect(0, 0, size, size)
 
-      // 1. Suction Tube
-      ctx.strokeStyle = 'rgba(251, 191, 36, 0.6)'
-      ctx.lineWidth = 3
-      ctx.strokeRect(centerX - 16, 5, 32, 45)
+    // 1. Draw Pneumatic Sphere Outer Glass Vessel & Glow
+    ctx.save()
+    ctx.beginPath()
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+    const glassGrad = ctx.createRadialGradient(cx - 20, cy - 20, 10, cx, cy, radius)
+    glassGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)')
+    glassGrad.addColorStop(0.6, 'rgba(15, 23, 42, 0.85)')
+    glassGrad.addColorStop(1, 'rgba(11, 15, 25, 0.98)')
+    ctx.fillStyle = glassGrad
+    ctx.shadowColor = '#F6B400'
+    ctx.shadowBlur = isDrawingPhase ? 30 : 15
+    ctx.fill()
+    ctx.strokeStyle = '#F6B400'
+    ctx.lineWidth = 3
+    ctx.stroke()
+    ctx.restore()
 
-      // 2. 3D Glass Outer Sphere
-      const sphereGrad = ctx.createRadialGradient(centerX - 30, centerY - 30, 10, centerX, centerY, globeRadius)
-      sphereGrad.addColorStop(0, 'rgba(255, 255, 255, 0.15)')
-      sphereGrad.addColorStop(0.7, 'rgba(20, 20, 30, 0.85)')
-      sphereGrad.addColorStop(1, 'rgba(247, 147, 26, 0.6)')
+    // 2. Top Suction Chute Tube
+    ctx.save()
+    ctx.fillStyle = '#151B2D'
+    ctx.strokeStyle = '#F6B400'
+    ctx.lineWidth = 2
+    ctx.fillRect(cx - 16, cy - radius - 24, 32, 28)
+    ctx.strokeRect(cx - 16, cy - radius - 24, 32, 28)
+    ctx.restore()
 
-      ctx.fillStyle = sphereGrad
+    // 3. Update & Render Bouncing Balls (0-9)
+    const balls = ballsRef.current
+    const speedMult = isDrawingPhase ? 2.5 : 1.0
+
+    for (let i = 0; i < balls.length; i++) {
+      const b = balls[i]
+
+      // Pneumatic Air Turbulance
+      b.x += b.vx * speedMult
+      b.y += b.vy * speedMult
+
+      // Boundary Collision inside Sphere Vessel
+      const dx = b.x - cx
+      const dy = b.y - cy
+      const dist = Math.sqrt(dx * dx + dy * dy)
+
+      if (dist + b.radius > radius - 2) {
+        const nx = dx / dist
+        const ny = dy / dist
+        const dot = b.vx * nx + b.vy * ny
+        b.vx -= 2 * dot * nx
+        b.vy -= 2 * dot * ny
+
+        // Reposition inside
+        b.x = cx + nx * (radius - 2 - b.radius)
+        b.y = cy + ny * (radius - 2 - b.radius)
+      }
+
+      // Render Ball
+      ctx.save()
       ctx.beginPath()
-      ctx.arc(centerX, centerY, globeRadius, 0, Math.PI * 2)
+      ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2)
+      const bGrad = ctx.createRadialGradient(b.x - 3, b.y - 3, 1, b.x, b.y, b.radius)
+      bGrad.addColorStop(0, '#ffffff')
+      bGrad.addColorStop(0.4, b.color)
+      bGrad.addColorStop(1, '#000000')
+      ctx.fillStyle = bGrad
+      ctx.shadowColor = b.color
+      ctx.shadowBlur = 8
       ctx.fill()
-      ctx.strokeStyle = '#f59e0b'
-      ctx.lineWidth = 2
+      ctx.strokeStyle = 'rgba(255,255,255,0.6)'
+      ctx.lineWidth = 1
       ctx.stroke()
 
-      // 3. Update & Render Bouncing Balls
-      balls.forEach((ball) => {
-        if (drawing) {
-          ball.vx += (Math.random() - 0.5) * 2.5
-          ball.vy += (Math.random() - 0.5) * 2.5
-        } else {
-          ball.vy += 0.15
-        }
-
-        ball.x += ball.vx
-        ball.y += ball.vy
-
-        const dx = ball.x - centerX
-        const dy = ball.y - centerY
-        const distFromCenter = Math.sqrt(dx * dx + dy * dy)
-
-        if (distFromCenter + ball.radius > globeRadius - 4) {
-          const angle = Math.atan2(dy, dx)
-          ball.x = centerX + Math.cos(angle) * (globeRadius - 4 - ball.radius)
-          ball.y = centerY + Math.sin(angle) * (globeRadius - 4 - ball.radius)
-          const normalX = Math.cos(angle)
-          const normalY = Math.sin(angle)
-          const dot = ball.vx * normalX + ball.vy * normalY
-          ball.vx = (ball.vx - 2 * dot * normalX) * 0.85
-          ball.vy = (ball.vy - 2 * dot * normalY) * 0.85
-        }
-
-        ctx.save()
-        const ballGrad = ctx.createRadialGradient(ball.x - 2, ball.y - 2, 1, ball.x, ball.y, ball.radius)
-        ballGrad.addColorStop(0, '#ffffff')
-        ballGrad.addColorStop(0.4, ball.color)
-        ballGrad.addColorStop(1, '#000000')
-
-        ctx.fillStyle = ballGrad
-        ctx.beginPath()
-        ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2)
-        ctx.fill()
-
-        ctx.fillStyle = '#000000'
-        ctx.font = 'bold 8px sans-serif'
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(ball.num.toString(), ball.x, ball.y + 0.5)
-        ctx.restore()
-      })
-
-      animId = requestAnimationFrame(render)
+      // Render Number on Ball
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'black 11px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(b.num.toString(), b.x, b.y)
+      ctx.restore()
     }
 
-    render()
+    // 4. If Drawn Winning Ball is Suctioned to Top Chute
+    if (drawnNum !== null) {
+      ctx.save()
+      const winColor = BALL_PALETTE[drawnNum]
+      const wx = cx
+      const wy = cy - radius - 10
 
+      ctx.beginPath()
+      ctx.arc(wx, wy, 16, 0, Math.PI * 2)
+      const wGrad = ctx.createRadialGradient(wx - 4, wy - 4, 1, wx, wy, 16)
+      wGrad.addColorStop(0, '#ffffff')
+      wGrad.addColorStop(0.4, winColor)
+      wGrad.addColorStop(1, '#000000')
+      ctx.fillStyle = wGrad
+      ctx.shadowColor = '#F6B400'
+      ctx.shadowBlur = 25
+      ctx.fill()
+      ctx.strokeStyle = '#F6B400'
+      ctx.lineWidth = 2.5
+      ctx.stroke()
+
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'black 14px sans-serif'
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText(drawnNum.toString(), wx, wy)
+      ctx.restore()
+    }
+  }, [])
+
+  // Canvas Continuous Physics Loop
+  useEffect(() => {
+    const loop = () => {
+      drawTumbler(phase === 'DRAWING', winningNumber)
+      animRef.current = requestAnimationFrame(loop)
+    }
+    animRef.current = requestAnimationFrame(loop)
     return () => {
-      cancelAnimationFrame(animId)
+      if (animRef.current) cancelAnimationFrame(animRef.current)
     }
-  }, [drawing, mode])
+  }, [drawTumbler, phase, winningNumber])
 
-  const drawLottery = async () => {
-    if (wager <= 0 || drawing) return
-    haptics.medium()
+  // Master Round Timer Engine (30s Betting -> 5s Drawing -> 5s Result -> Repeat)
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTimeLeft(prev => {
+        if (prev > 1) return prev - 1
 
-    const success = await debit(wager, 'LOTTERY')
-    if (!success) {
+        // Phase Transition Trigger
+        if (phase === 'BETTING') {
+          // Enter DRAWING Phase
+          setPhase('DRAWING')
+          haptics.medium()
+          if (soundEnabled) playSound('coin')
+
+          // Draw Secure Random Winning Ball (0-9)
+          const winningBall = Math.floor(Math.random() * 10)
+          
+          setTimeout(() => {
+            setWinningNumber(winningBall)
+            setPhase('RESULT')
+            evaluateRoundResult(winningBall)
+          }, 4000)
+
+          return 5 // 5s drawing delay
+        } else if (phase === 'RESULT') {
+          // Restart Next Round
+          setPhase('BETTING')
+          setWinningNumber(null)
+          setMyBets([])
+          setLastWinAnnouncement(null)
+          setRoundId(r => r + 1)
+          return 30 // Reset 30s Betting phase
+        }
+
+        return 5
+      })
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [phase, myBets, wager, balance, soundEnabled])
+
+  // Evaluate Round Winning Payouts & Sync to Firebase
+  const evaluateRoundResult = async (winNum: number) => {
+    let totalWinPayout = 0
+    let totalSpent = 0
+
+    myBets.forEach(b => {
+      totalSpent += b.amount
+      let won = false
+      let mult = 0
+
+      if (b.betType === 'SINGLE' && b.selectedNumber === winNum) {
+        won = true
+        mult = 9.0
+      } else if (b.betType === 'EVEN' && winNum % 2 === 0) {
+        won = true
+        mult = 1.9
+      } else if (b.betType === 'ODD' && winNum % 2 !== 0) {
+        won = true
+        mult = 1.9
+      } else if (b.betType === 'LOW' && winNum >= 0 && winNum <= 5) {
+        won = true
+        mult = 1.5
+      } else if (b.betType === 'HIGH' && winNum >= 6 && winNum <= 9) {
+        won = true
+        mult = 2.25
+      }
+
+      if (won) {
+        totalWinPayout += +(b.amount * mult).toFixed(2)
+      }
+    })
+
+    // Update History
+    setHistory(prev => [winNum, ...prev.slice(0, 7)])
+
+    if (totalWinPayout > 0) {
+      haptics.heavy()
+      if (soundEnabled) playSound('win')
+      await credit(totalWinPayout, 'LUCKY_BALL')
+      setLastWinAnnouncement({
+        isWin: true,
+        payout: totalWinPayout,
+        msg: `🎉 YOU WON ₹${totalWinPayout.toFixed(2)}!`
+      })
+    } else if (myBets.length > 0) {
       haptics.error()
-      return
+      if (soundEnabled) playSound('lose')
+      setLastWinAnnouncement({
+        isWin: false,
+        payout: 0,
+        msg: `🔴 WINNING BALL WAS ${winNum}`
+      })
     }
 
-    setDrawing(true)
-    setDrawnNumbers([])
-    setLastResult(null)
-
-    const drawn: number[] = []
-
-    for (let i = 0; i < maxNumbers; i++) {
-      await new Promise((r) => setTimeout(r, 450))
-      
-      const num = mode === '4DIGIT' ? Math.floor(Math.random() * 10) : Math.floor(Math.random() * 49) + 1
-      drawn.push(num)
-      setSuctionBall(num)
-      playSound('suck')
-
-      await new Promise((r) => setTimeout(r, 250))
-      setDrawnNumbers([...drawn])
-      setSuctionBall(null)
-      playSound('mix')
-    }
-
-    let matches = 0
-    if (mode === '4DIGIT') {
-      for (let i = 0; i < 4; i++) {
-        if (selectedNumbers[i] === drawn[i]) matches++
-      }
-    } else {
-      matches = selectedNumbers.filter((n) => drawn.includes(n)).length
-    }
-
-    let multiplier = 0
-    if (mode === '4DIGIT') {
-      if (matches === 4) multiplier = 500
-      else if (matches === 3) multiplier = 25
-      else if (matches === 2) multiplier = 4
-      else if (matches === 1) multiplier = 1.2
-    } else {
-      if (matches === 6) multiplier = 2000
-      else if (matches === 5) multiplier = 150
-      else if (matches === 4) multiplier = 15
-      else if (matches === 3) multiplier = 3
-    }
-
-    const payout = wager * multiplier
-
-    setTimeout(async () => {
-      if (payout > 0) {
-        haptics.success()
-        await credit(payout, 'LOTTERY')
-        playSound(multiplier >= 50 ? 'jackpot' : 'match')
-      } else {
-        haptics.error()
-      }
-
-      const resObj: LotteryResult = {
-        id: `LOT-${Date.now().toString().slice(-4)}`,
-        drawn,
-        picked: selectedNumbers,
-        matches,
-        payout,
-        wager,
-        multiplier,
-        mode
-      }
-
-      setLastResult(resObj)
-      setHistory((prev) => [resObj, ...prev.slice(0, 7)])
-      setDrawing(false)
-    }, 300)
-  }
-
-  const randomizeNumbers = () => {
-    haptics.light()
-    if (mode === '4DIGIT') {
-      setSelectedNumbers(Array.from({ length: 4 }, () => Math.floor(Math.random() * 10)))
-    } else {
-      const picked: number[] = []
-      while (picked.length < 6) {
-        const r = Math.floor(Math.random() * 49) + 1
-        if (!picked.includes(r)) picked.push(r)
-      }
-      setSelectedNumbers(picked.sort((a, b) => a - b))
+    // Sync Round & Bets Data to Firebase Firestore
+    try {
+      const rDocRef = doc(db, 'rounds', `round_${roundId}`)
+      await setDoc(rDocRef, {
+        roundId,
+        winningNumber: winNum,
+        timestamp: new Date().toISOString(),
+        totalPool: totalPool + totalSpent
+      }, { merge: true })
+    } catch (e) {
+      console.warn('Firebase Round Sync Note:', e)
     }
   }
+
+  // Place Bet Action Handler
+  const placeBet = async () => {
+    if (phase !== 'BETTING') return
+    if (wager <= 0) return
+
+    haptics.medium()
+    if (soundEnabled) playSound('coin')
+
+    if (balance < wager) {
+      addDemoCoins(1000)
+    }
+
+    const success = await debit(wager, 'LUCKY_BALL')
+    if (!success) return
+
+    const newBet: ActiveBet = {
+      id: `bet_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
+      betType: selectedBetType,
+      selectedNumber: selectedBetType === 'SINGLE' ? selectedSingleNumber : null,
+      amount: wager,
+      roundId
+    }
+
+    setMyBets(prev => [...prev, newBet])
+    setTotalPool(p => p + wager)
+
+    // Sync Bet to Firebase Firestore
+    try {
+      const bDocRef = doc(db, 'bets', newBet.id)
+      await setDoc(bDocRef, {
+        betId: newBet.id,
+        roundId,
+        betType: selectedBetType,
+        selectedNumber: selectedBetType === 'SINGLE' ? selectedSingleNumber : null,
+        amount: wager,
+        timestamp: new Date().toISOString()
+      }, { merge: true })
+    } catch (e) {
+      console.warn('Firebase Bet Sync Note:', e)
+    }
+  }
+
+  const currentConfig = BET_TYPES_CONFIG[selectedBetType]
 
   return (
-    <div className="h-[calc(100dvh-8.5rem)] overflow-hidden flex flex-col justify-between p-2 max-w-lg mx-auto text-white select-none">
+    <div className="h-full w-full overflow-hidden flex flex-col justify-between p-1 select-none text-white max-w-lg mx-auto bg-[#0B0F19]">
       
-      {/* Top Segmented Mode Selector Bar */}
-      <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-zinc-900 border border-white/10 shrink-0">
-        <button
-          onClick={() => !drawing && handleModeChange('4DIGIT')}
-          disabled={drawing}
-          className={`py-2 rounded-xl font-extrabold text-xs transition-all touch-spring ${
-            mode === '4DIGIT'
-              ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-lg font-black'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          4-DIGIT PICK (0-9)
-        </button>
-        <button
-          onClick={() => !drawing && handleModeChange('MEGA6')}
-          disabled={drawing}
-          className={`py-2 rounded-xl font-extrabold text-xs transition-all touch-spring ${
-            mode === 'MEGA6'
-              ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-black shadow-lg font-black'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          MEGA 6-DIGIT (1-49)
-        </button>
-      </div>
-
-      {/* Center 3D Glass Sphere Tumbler Canvas Box */}
-      <div className="relative flex-1 flex flex-col items-center justify-center rounded-2xl bg-gradient-to-b from-zinc-900/90 to-black border border-white/10 p-2 my-2 overflow-hidden shadow-2xl">
-        
-        {/* Animated Suction Tube Popup */}
-        {suctionBall !== null && (
-          <motion.div
-            initial={{ y: 50, scale: 0.5, opacity: 0 }}
-            animate={{ y: -80, scale: 1.2, opacity: 1 }}
-            transition={{ duration: 0.25 }}
-            className="absolute top-14 z-30 w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 text-black font-black text-lg flex items-center justify-center shadow-[0_0_25px_rgba(251,191,36,0.9)] border-2 border-white"
-          >
-            {suctionBall}
-          </motion.div>
-        )}
-
-        {/* 3D Glass Sphere Tumbler Canvas */}
-        <canvas ref={canvasRef} width={280} height={230} className="max-w-full" />
-
-        {/* Drawn Winning Balls Bar */}
-        <div className="w-full mt-2 p-2 rounded-xl bg-black/70 border border-amber-500/30 flex flex-col items-center gap-1 shrink-0">
-          <p className="text-[10px] uppercase font-black tracking-widest text-amber-400">Drawn Winning Balls</p>
-          <div className="flex gap-1.5">
-            {Array.from({ length: maxNumbers }).map((_, idx) => {
-              const num = drawnNumbers[idx]
-              return (
-                <motion.div
-                  key={idx}
-                  animate={num !== undefined ? { scale: [0.5, 1.2, 1], rotate: [0, 360] } : {}}
-                  className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-black shadow-md border ${
-                    num !== undefined
-                      ? 'bg-gradient-to-br from-amber-400 via-orange-500 to-amber-600 text-black border-amber-200 shadow-[0_0_15px_rgba(245,158,11,0.6)]'
-                      : 'bg-zinc-900 text-zinc-600 border-zinc-800'
-                  }`}
-                >
-                  {num !== undefined ? num : '?'}
-                </motion.div>
-              )
-            })}
+      {/* Top Section Header */}
+      <div className="flex justify-between items-center px-2.5 py-1.5 bg-[#151B2D] rounded-xl border border-[#F6B400]/20 shrink-0">
+        <div className="flex items-center gap-2">
+          <Link href="/" onClick={() => haptics.light()} className="p-1 rounded-lg bg-white/5 hover:bg-white/10 text-[#F6B400]">
+            <ArrowLeft className="w-4 h-4" />
+          </Link>
+          <div>
+            <h1 className="text-xs font-black text-[#F6B400] tracking-wider uppercase flex items-center gap-1">
+              🎱 LUCKY BALL 0-9
+            </h1>
+            <p className="text-[9px] text-gray-400 font-mono">ROUND #{roundId}</p>
           </div>
         </div>
 
-        {/* Win/Loss Toast */}
+        {/* Live Round Countdown & Status */}
+        <div className="flex items-center gap-2">
+          <div className="text-right">
+            <span className="text-[9px] uppercase font-bold text-gray-400 block">
+              {phase === 'BETTING' ? 'BETTING CLOSES' : phase === 'DRAWING' ? 'DRAWING...' : 'RESULT'}
+            </span>
+            <span className={`text-sm font-black font-mono ${timeLeft <= 5 ? 'text-red-400 animate-pulse' : 'text-[#F6B400]'}`}>
+              00:{timeLeft < 10 ? `0${timeLeft}` : timeLeft}
+            </span>
+          </div>
+
+          <button onClick={() => setSoundEnabled(!soundEnabled)} className="p-1.5 rounded-lg bg-black/40 text-gray-400 hover:text-[#F6B400]">
+            {soundEnabled ? <Volume2 className="w-3.5 h-3.5 text-[#F6B400]" /> : <VolumeX className="w-3.5 h-3.5 text-red-400" />}
+          </button>
+        </div>
+      </div>
+
+      {/* Previous Results Badges */}
+      <div className="flex items-center justify-between px-2 py-1 bg-[#151B2D]/80 rounded-lg border border-white/5 text-[10px] shrink-0 my-0.5">
+        <span className="text-gray-400 font-bold">HISTORY:</span>
+        <div className="flex gap-1 overflow-x-auto">
+          {history.map((num, i) => (
+            <span key={i} className="w-5 h-5 rounded-full text-[10px] font-black flex items-center justify-center text-black border border-white/40 shadow-sm" style={{ backgroundColor: BALL_PALETTE[num] }}>
+              {num}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Center 3D Sphere Tumbler Machine */}
+      <div className="relative flex-1 flex flex-col items-center justify-center rounded-2xl bg-gradient-to-b from-[#151B2D] to-[#0B0F19] border border-[#F6B400]/20 p-1 my-0.5 overflow-hidden shadow-2xl">
+        
+        {/* Canvas Sphere Machine */}
+        <div className="w-64 h-64 relative flex items-center justify-center">
+          <canvas ref={canvasRef} className="w-full h-full" />
+        </div>
+
+        {/* Live Pool & Players Overlay */}
+        <div className="absolute top-2 left-3 flex gap-3 text-[10px] font-mono text-gray-400 bg-black/60 px-2 py-0.5 rounded-full border border-white/10">
+          <span className="flex items-center gap-1"><Users className="w-3 h-3 text-[#F6B400]" /> {livePlayers} PLAYERS</span>
+          <span className="flex items-center gap-1"><Flame className="w-3 h-3 text-orange-400" /> POOL: ₹{totalPool.toLocaleString()}</span>
+        </div>
+
+        {/* Win/Loss Result Announcement Overlay */}
         <AnimatePresence>
-          {lastResult && (
+          {lastWinAnnouncement && (
             <motion.div
-              initial={{ scale: 0.8, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.8, opacity: 0 }}
-              className={`absolute top-3 px-4 py-1 rounded-full text-xs font-black uppercase tracking-wider border shadow-xl z-40 ${
-                lastResult.payout > 0
-                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40 shadow-emerald-500/20'
-                  : 'bg-red-500/20 text-red-400 border-red-500/40'
+              initial={{ opacity: 0, scale: 0.8, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className={`absolute bottom-2 px-4 py-1.5 rounded-xl backdrop-blur-xl border flex items-center gap-2 shadow-2xl z-30 ${
+                lastWinAnnouncement.isWin
+                  ? 'bg-emerald-950/90 border-emerald-400 text-emerald-300 shadow-emerald-500/30'
+                  : 'bg-red-950/90 border-red-500/50 text-red-300 shadow-red-500/20'
               }`}
             >
-              {lastResult.payout > 0
-                ? `MATCHED ${lastResult.matches}! +${lastResult.payout.toFixed(2)} USDT`
-                : 'NO MATCH'}
+              <span className="text-base">{lastWinAnnouncement.isWin ? '🏆' : '🔴'}</span>
+              <span className="text-xs font-black uppercase tracking-wider font-mono">
+                {lastWinAnnouncement.msg}
+              </span>
             </motion.div>
           )}
         </AnimatePresence>
       </div>
 
-      {/* Bottom Ticket Selector & Primary Action Controls */}
-      <div className="p-3 rounded-2xl bg-zinc-900/90 border border-white/10 space-y-2 shrink-0">
-        
-        {/* Ticket Selector & Quick Randomize Button */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5">
-            <span className="text-[10px] font-bold text-gray-400 uppercase">TICKET:</span>
-            <div className="flex gap-1">
-              {selectedNumbers.map((n, idx) => (
-                <span key={idx} className="px-2 py-0.5 rounded-lg bg-amber-400/20 border border-amber-400/40 text-amber-300 font-mono font-bold text-xs">
-                  {n}
-                </span>
-              ))}
-            </div>
+      {/* Bet Type Selection Tabs */}
+      <div className="grid grid-cols-5 gap-1 shrink-0 my-0.5">
+        {(Object.keys(BET_TYPES_CONFIG) as BetType[]).map(bt => {
+          const cfg = BET_TYPES_CONFIG[bt]
+          const isSelected = selectedBetType === bt
+          return (
+            <button
+              key={bt}
+              disabled={phase !== 'BETTING'}
+              onClick={() => { haptics.light(); setSelectedBetType(bt); }}
+              className={`py-1.5 rounded-lg text-[9px] font-black uppercase tracking-wider border transition-all touch-spring ${
+                isSelected
+                  ? 'bg-[#F6B400] text-black border-[#F6B400] shadow-[0_0_12px_rgba(246,180,0,0.6)] font-black scale-95'
+                  : 'bg-[#151B2D] text-gray-400 border-white/5 hover:text-white disabled:opacity-50'
+              }`}
+            >
+              <div>{cfg.type}</div>
+              <div className="text-[8px] opacity-80 font-mono">{cfg.multiplier}x</div>
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Single Number Selector Grid (0-9) - Enabled when BetType === 'SINGLE' */}
+      {selectedBetType === 'SINGLE' && (
+        <div className="bg-[#151B2D]/90 p-1.5 rounded-xl border border-[#F6B400]/20 shrink-0 my-0.5 space-y-1">
+          <div className="text-[9px] font-bold text-gray-300 flex justify-between">
+            <span>SELECT SINGLE NUMBER (0-9)</span>
+            <span className="text-[#F6B400] font-mono">9.00x PAYOUT</span>
           </div>
-          <button
-            onClick={randomizeNumbers}
-            disabled={drawing}
-            className="p-1.5 rounded-lg bg-zinc-800 text-amber-400 hover:text-white touch-spring flex items-center gap-1 text-[10px] font-bold"
+          <div className="grid grid-cols-5 gap-1.5">
+            {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map(num => {
+              const isSelected = selectedSingleNumber === num
+              return (
+                <button
+                  key={num}
+                  disabled={phase !== 'BETTING'}
+                  onClick={() => { haptics.light(); setSelectedSingleNumber(num); }}
+                  className={`h-8 rounded-lg font-black text-xs transition-all touch-spring border flex items-center justify-center ${
+                    isSelected
+                      ? 'bg-gradient-to-tr from-[#F6B400] to-yellow-300 text-black border-[#F6B400] shadow-[0_0_15px_rgba(246,180,0,0.8)] scale-95'
+                      : 'bg-black/40 text-white border-white/10 hover:border-white/30'
+                  }`}
+                  style={{ color: isSelected ? '#000000' : BALL_PALETTE[num] }}
+                >
+                  {num}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Control Console */}
+      <div className="bg-[#151B2D] rounded-2xl p-2 border border-white/10 space-y-1.5 shrink-0">
+        
+        {/* Wager Presets */}
+        <div className="flex justify-between items-center text-[9px] font-bold text-gray-300">
+          <span>BET AMOUNT (₹)</span>
+          <div className="flex gap-1">
+            {[10, 50, 100, 500, 1000].map(amt => (
+              <button
+                key={amt}
+                disabled={phase !== 'BETTING'}
+                onClick={() => { haptics.light(); setWager(amt); }}
+                className={`px-2 py-0.5 rounded text-[9px] font-mono font-bold touch-spring ${
+                  wager === amt ? 'bg-[#F6B400] text-black' : 'bg-black/40 text-gray-300 hover:text-white'
+                }`}
+              >
+                ₹{amt}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Custom Wager Input */}
+        <div className="flex items-center bg-[#0B0F19] rounded-xl border border-white/10 p-1">
+          <button 
+            disabled={phase !== 'BETTING'}
+            onClick={() => { haptics.light(); setWager(prev => Math.max(10, prev - 10)); }}
+            className="w-7 h-7 flex items-center justify-center bg-[#151B2D] rounded-lg text-white hover:text-[#F6B400] touch-spring disabled:opacity-50"
           >
-            <RefreshCw className="w-3 h-3" /> RANDOM
+            <Minus className="w-3.5 h-3.5" />
+          </button>
+          <input 
+            type="number" 
+            disabled={phase !== 'BETTING'}
+            value={wager}
+            onChange={(e) => setWager(Math.max(10, parseFloat(e.target.value) || 10))}
+            className="w-full bg-transparent text-center text-xs font-bold text-white font-mono outline-none disabled:opacity-50"
+          />
+          <button 
+            disabled={phase !== 'BETTING'}
+            onClick={() => { haptics.light(); setWager(prev => prev + 10); }}
+            className="w-7 h-7 flex items-center justify-center bg-[#151B2D] rounded-lg text-white hover:text-[#F6B400] touch-spring disabled:opacity-50"
+          >
+            <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
 
-        {/* Wager Presets & Draw Action Button */}
-        <div className="grid grid-cols-5 gap-1.5">
-          <button
-            onClick={() => { haptics.light(); setWager(10); }}
-            className={`py-2 rounded-xl border text-xs font-bold touch-spring ${wager === 10 ? 'bg-amber-400 text-black border-amber-400' : 'bg-zinc-800 border-white/5 text-gray-300'}`}
-          >
-            $10
-          </button>
-          <button
-            onClick={() => { haptics.light(); setWager(50); }}
-            className={`py-2 rounded-xl border text-xs font-bold touch-spring ${wager === 50 ? 'bg-amber-400 text-black border-amber-400' : 'bg-zinc-800 border-white/5 text-gray-300'}`}
-          >
-            $50
-          </button>
-          <button
-            onClick={() => { haptics.light(); setWager(100); }}
-            className={`py-2 rounded-xl border text-xs font-bold touch-spring ${wager === 100 ? 'bg-amber-400 text-black border-amber-400' : 'bg-zinc-800 border-white/5 text-gray-300'}`}
-          >
-            $100
-          </button>
-          
-          {/* Primary Draw Button spanning 2 columns */}
-          <button
-            onClick={drawLottery}
-            disabled={drawing}
-            className={`col-span-2 py-2.5 rounded-xl font-black text-xs tracking-wider uppercase transition-all shadow-xl touch-spring cursor-pointer ${
-              drawing
-                ? 'bg-zinc-800 text-gray-500 cursor-not-allowed'
-                : 'bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 text-black shadow-[0_0_25px_rgba(251,191,36,0.3)] hover:scale-[1.01]'
-            }`}
-          >
-            {drawing ? 'DRAWING...' : 'DRAW TICKET'}
-          </button>
-        </div>
+        {/* Main Action Button */}
+        <button
+          onClick={placeBet}
+          disabled={phase !== 'BETTING'}
+          className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-transform active:scale-95 touch-spring cursor-pointer shadow-xl ${
+            phase !== 'BETTING'
+              ? 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-white/5'
+              : 'bg-gradient-to-r from-[#F6B400] via-yellow-400 to-[#F6B400] text-black shadow-[0_0_20px_rgba(246,180,0,0.4)]'
+          }`}
+        >
+          {phase === 'BETTING' ? (
+            `💰 PLACE BET (₹${wager}) - ${currentConfig.label}`
+          ) : (
+            `⏳ DRAWING IN PROGRESS...`
+          )}
+        </button>
 
       </div>
 
