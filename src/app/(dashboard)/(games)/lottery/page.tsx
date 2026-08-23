@@ -90,6 +90,23 @@ export default function RealisticLuckyBallGame() {
     multiplier: number
   } | null>(null)
 
+  // 24-Hour Bet History Table State
+  const [betHistory24h, setBetHistory24h] = useState<Array<{
+    id: string
+    roundId: number
+    time: string
+    betTypeLabel: string
+    wager: number
+    winningBall: number
+    payout: number
+    isWin: boolean
+  }>>([
+    { id: 'b_101', roundId: 9104, time: '22:38:12', betTypeLabel: '0 / 5 BET', wager: 100, winningBall: 5, payout: 450, isWin: true },
+    { id: 'b_102', roundId: 9103, time: '22:37:32', betTypeLabel: '1 - 5 RANGE', wager: 50, winningBall: 2, payout: 90, isWin: true },
+    { id: 'b_103', roundId: 9102, time: '22:36:52', betTypeLabel: 'SINGLE (0-9)', wager: 100, winningBall: 9, payout: 0, isWin: false },
+    { id: 'b_104', roundId: 9101, time: '22:36:12', betTypeLabel: '6 - 9 RANGE', wager: 200, winningBall: 7, payout: 450, isWin: true },
+  ])
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ballsRef = useRef<BallPhysics[]>([])
   const animRef = useRef<number | null>(null)
@@ -438,6 +455,31 @@ export default function RealisticLuckyBallGame() {
 
     setHistory(prev => [winNum, ...prev.slice(0, 7)])
 
+    const newHistoryEntries = myBets.map(b => {
+      let won = false
+      let mult = 0
+      if (b.betType === 'SINGLE' && b.selectedNumber === winNum) { won = true; mult = 9.0 }
+      else if (b.betType === 'RANGE_1_5' && winNum >= 1 && winNum <= 5) { won = true; mult = 1.8 }
+      else if (b.betType === 'RANGE_6_9' && winNum >= 6 && winNum <= 9) { won = true; mult = 2.25 }
+      else if (b.betType === 'ZERO_FIVE' && (winNum === 0 || winNum === 5)) { won = true; mult = 4.5 }
+
+      const payout = won ? +(b.amount * mult).toFixed(2) : 0
+      return {
+        id: b.id,
+        roundId: b.roundId,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+        betTypeLabel: BET_TYPES_CONFIG[b.betType].label,
+        wager: b.amount,
+        winningBall: winNum,
+        payout,
+        isWin: won
+      }
+    })
+
+    if (newHistoryEntries.length > 0) {
+      setBetHistory24h(prev => [...newHistoryEntries, ...prev].slice(0, 50))
+    }
+
     if (myBets.length > 0) {
       setResultModal({
         show: true,
@@ -773,6 +815,65 @@ export default function RealisticLuckyBallGame() {
           )}
         </button>
 
+      </div>
+
+      {/* 24-HOUR BET HISTORY TABLE */}
+      <div className="bg-[#121826]/90 rounded-2xl p-2 border border-white/10 shrink-0 my-1 space-y-1.5">
+        <div className="flex justify-between items-center px-1">
+          <span className="text-[10px] font-black text-[#F7B500] uppercase tracking-wider flex items-center gap-1">
+            📜 24-HOUR BET HISTORY TABLE
+          </span>
+          <span className="text-[9px] text-gray-400 font-mono">LIVE DAILY SYNC ACTIVE</span>
+        </div>
+
+        <div className="overflow-x-auto max-h-32 rounded-xl border border-white/5 bg-black/40">
+          <table className="w-full text-left text-[9px] font-mono border-collapse">
+            <thead className="bg-[#182338] text-gray-400 uppercase sticky top-0">
+              <tr>
+                <th className="py-1 px-2">Round</th>
+                <th className="py-1 px-1">Time</th>
+                <th className="py-1 px-1">Bet Type</th>
+                <th className="py-1 px-1 text-center">Ball</th>
+                <th className="py-1 px-1 text-right">Wager</th>
+                <th className="py-1 px-1 text-right">Payout</th>
+                <th className="py-1 px-2 text-center">Result</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5 text-gray-300">
+              {betHistory24h.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-3 text-center text-gray-500">No bets placed in 24 hours</td>
+                </tr>
+              ) : (
+                betHistory24h.map(rec => (
+                  <tr key={rec.id} className="hover:bg-white/5 transition-colors">
+                    <td className="py-1 px-2 font-bold text-gray-400">#{rec.roundId}</td>
+                    <td className="py-1 px-1 text-gray-400">{rec.time}</td>
+                    <td className="py-1 px-1 font-bold text-white">{rec.betTypeLabel}</td>
+                    <td className="py-1 px-1 text-center font-black">
+                      <span className={`inline-block px-1.5 py-0.2 rounded-full text-[8px] text-black ${
+                        rec.winningBall % 2 === 0 ? 'bg-[#2D8CFF]' : 'bg-[#FF8C1A]'
+                      }`}>
+                        #{rec.winningBall}
+                      </span>
+                    </td>
+                    <td className="py-1 px-1 text-right text-gray-300">₹{rec.wager}</td>
+                    <td className={`py-1 px-1 text-right font-bold ${rec.isWin ? 'text-emerald-400' : 'text-gray-500'}`}>
+                      ₹{rec.payout.toFixed(2)}
+                    </td>
+                    <td className="py-1 px-2 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                        rec.isWin ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' : 'bg-red-950 text-red-400 border border-red-500/30'
+                      }`}>
+                        {rec.isWin ? 'WIN' : 'LOSS'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* GRAND CONGRATULATIONS VICTORY & RESULT POPUP MODAL */}
