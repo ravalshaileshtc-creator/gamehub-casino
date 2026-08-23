@@ -34,6 +34,14 @@ export const getBallColor = (num: number) => {
   return num % 2 === 0 ? '#2D8CFF' : '#FF8C1A'
 }
 
+// Global Deterministic PRNG Seeded by Round ID (Same Winning Number on ALL devices globally)
+export const getGlobalRoundWinningNumber = (roundId: number): number => {
+  let seed = (roundId ^ 0x9E3779B9) >>> 0
+  seed = Math.imul(seed ^ (seed >>> 16), 0x85ebca6b)
+  seed = Math.imul(seed ^ (seed >>> 13), 0xc2b2ae35)
+  return ((seed ^ (seed >>> 16)) >>> 0) % 10
+}
+
 interface BallPhysics {
   num: number
   x: number
@@ -386,43 +394,63 @@ export default function RealisticLuckyBallGame() {
     }
   }, [drawMachine, phase, winningNumber])
 
-  // Master Round Timer (30s Betting -> 5s Drawing -> 5s Result -> Repeat)
+  // Master Global Clock Synchronizer (30s Betting -> 5s Drawing -> 5s Result)
+  // All devices globally synchronize to the EXACT SAME Unix Epoch Timestamp & Deterministic Winning Ball Number
+  const evaluatedRoundRef = useRef<number | null>(null)
+
   useEffect(() => {
-    const timer = setInterval(() => {
-      setTimeLeft(prev => {
-        if (prev > 1) return prev - 1
+    const syncGlobalClock = () => {
+      const CYCLE = 40 // 30s Betting + 5s Drawing + 5s Result
+      const nowSec = Math.floor(Date.now() / 1000)
+      const currentRoundId = 9100 + Math.floor(nowSec / CYCLE)
+      const cycleSec = nowSec % CYCLE
 
-        if (phase === 'BETTING') {
-          setPhase('DRAWING')
-          haptics.medium()
-          if (soundEnabled) playSound('suction')
+      setRoundId(currentRoundId)
 
-          const winBall = Math.floor(Math.random() * 10)
-          
-          setTimeout(() => {
-            if (soundEnabled) playSound('suction')
-            setWinningNumber(winBall)
-            setPhase('RESULT')
-            evaluateRound(winBall)
-          }, 4000)
-
-          return 5
-        } else if (phase === 'RESULT') {
+      if (cycleSec < 30) {
+        // BETTING Phase (30s to 1s)
+        const remain = 30 - cycleSec
+        if (phase !== 'BETTING') {
           setPhase('BETTING')
           setWinningNumber(null)
           setMyBets([])
           setLastWinAnnouncement(null)
           setResultModal(null)
-          setRoundId(r => r + 1)
-          return 30
         }
+        setTimeLeft(remain)
+      } else if (cycleSec >= 30 && cycleSec < 35) {
+        // DRAWING Phase (5s)
+        const remain = 35 - cycleSec
+        if (phase !== 'DRAWING') {
+          setPhase('DRAWING')
+          haptics.medium()
+          if (soundEnabled) playSound('suction')
+        }
+        setTimeLeft(remain)
+      } else {
+        // RESULT Phase (5s)
+        const remain = 40 - cycleSec
+        const deterministicWinBall = getGlobalRoundWinningNumber(currentRoundId)
 
-        return 5
-      })
-    }, 1000)
+        if (phase !== 'RESULT') {
+          setPhase('RESULT')
+          setWinningNumber(deterministicWinBall)
+          if (soundEnabled) playSound('suction')
+        }
+        setTimeLeft(remain)
 
-    return () => clearInterval(timer)
-  }, [phase, myBets, wager, balance, soundEnabled])
+        // Evaluate bet results once per round
+        if (evaluatedRoundRef.current !== currentRoundId) {
+          evaluatedRoundRef.current = currentRoundId
+          evaluateRound(deterministicWinBall)
+        }
+      }
+    }
+
+    syncGlobalClock()
+    const syncInterval = setInterval(syncGlobalClock, 500)
+    return () => clearInterval(syncInterval)
+  }, [phase, myBets, soundEnabled])
 
   // Evaluate Round Result
   const evaluateRound = async (winNum: number) => {
