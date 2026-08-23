@@ -3,7 +3,7 @@
   "appName": "Game Hub Mobile Casino",
   "webDir": "out",
   "server": {
-    "url": "http://10.90.193.101:3000",
+    "url": "https://gamehub-casino.vercel.app",
     "cleartext": true
   },
   "android": {
