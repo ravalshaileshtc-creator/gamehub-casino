@@ -79,6 +79,17 @@ export default function RealisticLuckyBallGame() {
   const [livePlayers] = useState(214)
   const [totalPool, setTotalPool] = useState(58900)
   const [lastWinAnnouncement, setLastWinAnnouncement] = useState<{ isWin: boolean; payout: number; msg: string } | null>(null)
+  
+  // Grand Result Modal State
+  const [resultModal, setResultModal] = useState<{
+    show: boolean
+    isWin: boolean
+    payout: number
+    totalSpent: number
+    netProfit: number
+    winNum: number
+    multiplier: number
+  } | null>(null)
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const ballsRef = useRef<BallPhysics[]>([])
@@ -385,6 +396,7 @@ export default function RealisticLuckyBallGame() {
           setWinningNumber(null)
           setMyBets([])
           setLastWinAnnouncement(null)
+          setResultModal(null)
           setRoundId(r => r + 1)
           return 30
         }
@@ -429,6 +441,18 @@ export default function RealisticLuckyBallGame() {
     })
 
     setHistory(prev => [winNum, ...prev.slice(0, 7)])
+
+    if (myBets.length > 0) {
+      setResultModal({
+        show: true,
+        isWin: totalWinPayout > 0,
+        payout: totalWinPayout,
+        totalSpent,
+        netProfit: totalWinPayout - totalSpent,
+        winNum,
+        multiplier: totalSpent > 0 ? +(totalWinPayout / totalSpent).toFixed(2) : 0
+      })
+    }
 
     if (totalWinPayout > 0) {
       haptics.heavy()
@@ -738,7 +762,7 @@ export default function RealisticLuckyBallGame() {
           disabled={phase !== 'BETTING' || isBetLocked}
           className={`w-full py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-transform active:scale-95 touch-spring cursor-pointer shadow-xl ${
             phase !== 'BETTING' || isBetLocked
-              ? 'bg-zinc-800 text-gray-400 cursor-not-allowed border border-white/10 opacity-75'
+              ? 'bg-zinc-800 text-gray-400 cursor-not-allowed border border-[#F7B500]/20 opacity-75'
               : 'bg-gradient-to-r from-[#F7B500] via-yellow-400 to-[#F7B500] text-black shadow-[0_0_20px_rgba(247,181,0,0.4)] hover:brightness-110'
           }`}
         >
@@ -752,6 +776,96 @@ export default function RealisticLuckyBallGame() {
         </button>
 
       </div>
+
+      {/* GRAND CONGRATULATIONS VICTORY & RESULT POPUP MODAL */}
+      <AnimatePresence>
+        {resultModal && resultModal.show && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
+            onClick={() => setResultModal(null)}
+          >
+            <motion.div
+              initial={{ scale: 0.7, y: 30 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.7, y: 30 }}
+              onClick={(e) => e.stopPropagation()}
+              className={`w-full max-w-xs p-5 rounded-3xl border text-center shadow-2xl relative overflow-hidden ${
+                resultModal.isWin
+                  ? 'bg-gradient-to-b from-[#182338] via-[#121826] to-[#090C15] border-[#F7B500] shadow-[0_0_50px_rgba(247,181,0,0.5)]'
+                  : 'bg-gradient-to-b from-[#241419] via-[#121826] to-[#090C15] border-red-500/50 shadow-[0_0_30px_rgba(239,68,68,0.3)]'
+              }`}
+            >
+              {/* Background Sunburst Glow */}
+              <div className={`absolute -top-24 left-1/2 -translate-x-1/2 w-64 h-64 rounded-full blur-3xl opacity-40 pointer-events-none ${
+                resultModal.isWin ? 'bg-[#F7B500]' : 'bg-red-500'
+              }`} />
+
+              {/* Top Header Badge */}
+              <div className="relative z-10 space-y-2">
+                <div className="mx-auto w-16 h-16 rounded-full bg-[#121826] border-2 border-[#F7B500] flex items-center justify-center shadow-xl">
+                  <span className="text-3xl">{resultModal.isWin ? '👑' : '🔴'}</span>
+                </div>
+
+                <h2 className={`text-xl font-black uppercase tracking-wider ${
+                  resultModal.isWin 
+                    ? 'bg-gradient-to-r from-yellow-300 via-[#F7B500] to-yellow-100 bg-clip-text text-transparent drop-shadow-md'
+                    : 'text-red-400'
+                }`}>
+                  {resultModal.isWin ? '🎉 CONGRATULATIONS! 🎉' : 'ROUND FINISHED'}
+                </h2>
+
+                <p className="text-[10px] text-gray-400 font-mono">
+                  WINNING BALL WAS <span className="text-[#F7B500] font-black">#{resultModal.winNum}</span>
+                </p>
+
+                {/* Main Payout Display */}
+                <div className="py-3 px-4 rounded-2xl bg-black/50 border border-white/10 my-2">
+                  <span className="text-[10px] text-gray-400 uppercase font-bold block">TOTAL RESULT</span>
+                  <span className={`text-2xl font-black font-mono tracking-tight ${
+                    resultModal.isWin ? 'text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.5)]' : 'text-red-400'
+                  }`}>
+                    {resultModal.isWin ? `+₹${resultModal.payout.toFixed(2)}` : `-₹${resultModal.totalSpent.toFixed(2)}`}
+                  </span>
+                  {resultModal.isWin && (
+                    <span className="text-[10px] text-[#F7B500] font-mono font-bold block mt-1">
+                      PROFIT: +₹{resultModal.netProfit.toFixed(2)} ({resultModal.multiplier}x)
+                    </span>
+                  )}
+                </div>
+
+                {/* Details Grid */}
+                <div className="grid grid-cols-2 gap-2 text-[10px] font-mono bg-white/5 p-2 rounded-xl border border-white/5">
+                  <div className="text-left">
+                    <span className="text-gray-400 block">WAGERED</span>
+                    <span className="font-bold text-white">₹{resultModal.totalSpent}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-gray-400 block">PAYOUT</span>
+                    <span className={`font-bold ${resultModal.isWin ? 'text-emerald-400' : 'text-gray-400'}`}>
+                      ₹{resultModal.payout.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Dismiss Button */}
+                <button
+                  onClick={() => setResultModal(null)}
+                  className={`w-full py-2.5 rounded-xl font-black text-xs uppercase tracking-wider transition-all mt-3 ${
+                    resultModal.isWin
+                      ? 'bg-gradient-to-r from-[#F7B500] to-yellow-400 text-black shadow-lg shadow-[#F7B500]/30 hover:brightness-110'
+                      : 'bg-white/10 text-white hover:bg-white/20'
+                  }`}
+                >
+                  CONTINUE NEXT ROUND
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   )
