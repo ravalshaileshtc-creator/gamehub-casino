@@ -72,6 +72,8 @@ export default function RealisticLuckyBallGame() {
   const [wager, setWager] = useState<number>(100)
   const [myBets, setMyBets] = useState<ActiveBet[]>([])
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const [isBetLocked, setIsBetLocked] = useState(false)
+  const [betConfirmedNotice, setBetConfirmedNotice] = useState<string | null>(null)
 
   // Live Stats
   const [livePlayers] = useState(214)
@@ -462,9 +464,10 @@ export default function RealisticLuckyBallGame() {
 
   // Place Bet
   const placeBet = async () => {
-    if (phase !== 'BETTING') return
+    if (phase !== 'BETTING' || isBetLocked) return
     if (wager <= 0) return
 
+    setIsBetLocked(true)
     haptics.medium()
     if (soundEnabled) playSound('chip')
 
@@ -473,7 +476,10 @@ export default function RealisticLuckyBallGame() {
     }
 
     const success = await debit(wager, 'LUCKY_BALL')
-    if (!success) return
+    if (!success) {
+      setIsBetLocked(false)
+      return
+    }
 
     const newBet: ActiveBet = {
       id: `bet_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`,
@@ -485,6 +491,21 @@ export default function RealisticLuckyBallGame() {
 
     setMyBets(prev => [...prev, newBet])
     setTotalPool(p => p + wager)
+
+    const labelStr = selectedBetType === 'SINGLE' 
+      ? `SINGLE #${selectedSingleNumber}` 
+      : selectedBetType
+    
+    setBetConfirmedNotice(`✅ BET CONFIRMED: ₹${wager} ON ${labelStr}`)
+
+    // Unlock button after exactly 2 seconds (2000ms)
+    setTimeout(() => {
+      setIsBetLocked(false)
+    }, 2000)
+
+    setTimeout(() => {
+      setBetConfirmedNotice(null)
+    }, 3500)
 
     try {
       const bDocRef = doc(db, 'bets', newBet.id)
@@ -698,19 +719,35 @@ export default function RealisticLuckyBallGame() {
           </button>
         </div>
 
+        {/* Green Bet Confirmation Notice Banner */}
+        <AnimatePresence>
+          {betConfirmedNotice && (
+            <motion.div
+              initial={{ opacity: 0, y: -5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="py-1.5 px-3 rounded-xl bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[10px] font-black text-center font-mono shadow-lg shadow-emerald-500/20"
+            >
+              {betConfirmedNotice}
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         <button
           onClick={placeBet}
-          disabled={phase !== 'BETTING'}
+          disabled={phase !== 'BETTING' || isBetLocked}
           className={`w-full py-3 rounded-xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-transform active:scale-95 touch-spring cursor-pointer shadow-xl ${
-            phase !== 'BETTING'
-              ? 'bg-zinc-800 text-gray-500 cursor-not-allowed border border-white/5'
-              : 'bg-gradient-to-r from-[#F7B500] via-yellow-400 to-[#F7B500] text-black shadow-[0_0_20px_rgba(247,181,0,0.4)]'
+            phase !== 'BETTING' || isBetLocked
+              ? 'bg-zinc-800 text-gray-400 cursor-not-allowed border border-white/10 opacity-75'
+              : 'bg-gradient-to-r from-[#F7B500] via-yellow-400 to-[#F7B500] text-black shadow-[0_0_20px_rgba(247,181,0,0.4)] hover:brightness-110'
           }`}
         >
-          {phase === 'BETTING' ? (
-            `💰 PLACE BET (₹${wager}) - ${currentConfig.label}`
-          ) : (
+          {phase !== 'BETTING' ? (
             `⏳ DRAWING IN PROGRESS...`
+          ) : isBetLocked ? (
+            `🔒 BET CONFIRMED (LOCK 2s)`
+          ) : (
+            `💰 PLACE BET (₹${wager}) - ${currentConfig.label}`
           )}
         </button>
 
