@@ -190,6 +190,12 @@ export default function RealisticLuckyBallGame() {
         const minDist = b1.radius + b2.radius
 
         if (dist < minDist && dist > 0) {
+          // Play subtle clink sound on high-velocity collision
+          const relVel = Math.abs(b1.vx - b2.vx) + Math.abs(b1.vy - b2.vy)
+          if (relVel > 3.0 && soundEnabled && Math.random() < 0.15) {
+            playSound('clink')
+          }
+
           // Normal vector
           const nx = dx / dist
           const ny = dy / dist
@@ -360,11 +366,12 @@ export default function RealisticLuckyBallGame() {
         if (phase === 'BETTING') {
           setPhase('DRAWING')
           haptics.medium()
-          if (soundEnabled) playSound('coin')
+          if (soundEnabled) playSound('suction')
 
           const winBall = Math.floor(Math.random() * 10)
           
           setTimeout(() => {
+            if (soundEnabled) playSound('suction')
             setWinningNumber(winBall)
             setPhase('RESULT')
             evaluateRound(winBall)
@@ -423,7 +430,7 @@ export default function RealisticLuckyBallGame() {
 
     if (totalWinPayout > 0) {
       haptics.heavy()
-      if (soundEnabled) playSound('win')
+      if (soundEnabled) playSound('jackpot')
       await credit(totalWinPayout, 'LUCKY_BALL')
       setLastWinAnnouncement({
         isWin: true,
@@ -459,7 +466,7 @@ export default function RealisticLuckyBallGame() {
     if (wager <= 0) return
 
     haptics.medium()
-    if (soundEnabled) playSound('coin')
+    if (soundEnabled) playSound('chip')
 
     if (balance < wager) {
       addDemoCoins(1000)
