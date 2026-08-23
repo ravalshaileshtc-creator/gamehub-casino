@@ -1,0 +1,520 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum UserRole {
+  USER
+  ADMIN
+  SUPER_ADMIN
+}
+
+enum KYCStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum VIPLevel {
+  BRONZE
+  SILVER
+  GOLD
+  PLATINUM
+  DIAMOND
+}
+
+enum TransactionType {
+  DEPOSIT
+  WITHDRAWAL
+  BET
+  WIN
+  BONUS
+  REFERRAL
+  CASHBACK
+  ADJUSTMENT
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  CRYPTO
+  BANK_TRANSFER
+  RAZORPAY
+}
+
+enum DepositStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum WithdrawalStatus {
+  PENDING
+  APPROVED
+  PROCESSING
+  COMPLETED
+  REJECTED
+  CANCELLED
+}
+
+enum GameType {
+  DICE
+  COINFLIP
+  ROULETTE
+  CRASH
+  MINES
+  SLOTS
+  BLACKJACK
+  BACCARAT
+  PLINKO
+  WHEEL
+}
+
+enum BonusType {
+  SIGNUP
+  DEPOSIT
+  REFERRAL
+  DAILY
+  CASHBACK
+  VIP
+}
+
+enum BonusStatus {
+  ACTIVE
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum NotificationType {
+  DEPOSIT
+  WITHDRAWAL
+  BET_WIN
+  BET_LOSS
+  BONUS
+  LEVEL_UP
+  SYSTEM
+}
+
+// ============================================
+// USER & AUTH MODELS
+// ============================================
+
+model User {
+  id                  String    @id @default(auto()) @map("_id") @db.ObjectId
+  name                String?
+  email               String    @unique
+  emailVerified       DateTime?
+  password            String
+  transactionPassword String?   // Separate password for withdrawals
+  image               String?
+  role                UserRole  @default(USER)
+  
+  // Two-Factor Authentication
+  twoFactorEnabled    Boolean   @default(false)
+  twoFactorSecret     String?
+  twoFactorBackup     String[]
+  
+  // Wallet Balances
+  mainBalance         Float     @default(0)
+  bonusBalance        Float     @default(0)
+  lockedBalance       Float     @default(0)
+  
+  // KYC
+  kycStatus           KYCStatus @default(PENDING)
+  kycDocument         String?
+  kycRejectionReason  String?
+  kycSubmittedAt      DateTime?
+  kycApprovedAt       DateTime?
+  
+  // VIP System
+  vipLevel            VIPLevel  @default(BRONZE)
+  totalWagered        Float     @default(0)
+
+  // Provably Fair
+  serverSeed          String?   // Hashed seed is shown to user
+  clientSeed          String?
+  nonce               Int       @default(0)
+  
+  // Referral
+  referralCode        String?   @unique
+  referredBy          String?   @db.ObjectId
+  referralEarnings    Float     @default(0)
+  
+  // Security
+  ipAddresses         String[]
+  lastLogin           DateTime?
+  lastLoginIp         String?
+  loginAttempts       Int       @default(0)
+  lockedUntil         DateTime?
+  isBanned            Boolean   @default(false)
+  banReason           String?
+  isActive            Boolean   @default(true)
+  
+  // Profile settings
+  avatar              String?
+  bio                 String?
+  
+  // Notification preferences
+  emailNotifications  Boolean   @default(true)
+  smsNotifications    Boolean   @default(false)
+  pushNotifications   Boolean   @default(true)
+  marketingEmails     Boolean   @default(true)
+  
+  // Privacy settings
+  profileVisibility   String    @default("PUBLIC")
+  showBettingHistory  Boolean   @default(false)
+  allowFriendRequests Boolean   @default(true)
+  
+  // User preferences
+  language            String    @default("en")
+  currency            String    @default("INR")
+  timezone            String    @default("Asia/Kolkata")
+  soundEffects        Boolean   @default(true)
+  
+  // Account management
+  selfExcluded        Boolean   @default(false)
+  selfExcludedUntil   DateTime?
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  accounts            Account[]
+  sessions            Session[]
+  transactions        Transaction[]
+  bets                Bet[]
+  deposits            Deposit[]
+  withdrawals         Withdrawal[]
+  bonuses             UserBonus[]
+  notifications       Notification[]
+  auditLogs           AuditLog[]
+  chatMessages        ChatMessage[]
+}
+
+model Account {
+  id                String  @id @default(auto()) @map("_id") @db.ObjectId
+  userId            String  @db.ObjectId
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.String
+  access_token      String? @db.String
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.String
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  sessionToken String   @unique
+  userId       String   @db.ObjectId
+  expires      DateTime
+  ipAddress    String?
+  userAgent    String?
+  
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  identifier String
+  token      String   @unique
+  type       String   // EMAIL_VERIFY, PASSWORD_RESET, 2FA
+  expires    DateTime
+  createdAt  DateTime @default(now())
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// TRANSACTION MODELS
+// ============================================
+
+model Transaction {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String            @db.ObjectId
+  type            TransactionType
+  amount          Float
+  balanceBefore   Float
+  balanceAfter    Float
+  balanceType     String            @default("main") // main, bonus, locked
+  status          TransactionStatus @default(PENDING)
+  description     String?
+  metadata        Json?
+  referenceId     String?           // Link to bet/deposit/withdrawal
+  createdAt       DateTime          @default(now())
+  completedAt     DateTime?
+  
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([type, status])
+  @@index([referenceId])
+}
+
+// ============================================
+// PAYMENT MODELS
+// ============================================
+
+model Deposit {
+  id              String        @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String        @db.ObjectId
+  amount          Float
+  method          PaymentMethod
+  status          DepositStatus @default(PENDING)
+  referenceId     String?
+  transactionHash String?
+  gatewayResponse Json?
+  upiId           String?
+  createdAt       DateTime      @default(now())
+  completedAt     DateTime?
+  
+  user            User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, status])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+model Withdrawal {
+  id              String            @id @default(auto()) @map("_id") @db.ObjectId
+  userId          String            @db.ObjectId
+  amount          Float
+  fee             Float             @default(0)
+  finalAmount     Float             // amount - fee
+  method          PaymentMethod
+  status          WithdrawalStatus  @default(PENDING)
+  
+  // Bank Details
+  bankName        String?
+  accountNumber   String?
+  ifscCode        String?
+  upiId           String?
+  cryptoAddress   String?
+  
+  // Admin Actions
+  adminNotes      String?
+  approvedBy      String?           @db.ObjectId
+  approvedAt      DateTime?
+  rejectedReason  String?
+  
+  createdAt       DateTime          @default(now())
+  processedAt     DateTime?
+  
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, status])
+  @@index([status, createdAt(sort: Desc)])
+}
+
+// ============================================
+// BETTING & GAME MODELS
+// ============================================
+
+model Bet {
+  id             String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String    @db.ObjectId
+  game           GameType
+  wager          Float
+  payout         Float
+  multiplier     Float
+  profit         Float     // payout - wager
+  
+  // Provably Fair
+  serverSeed     String
+  serverSeedHash String
+  clientSeed     String
+  nonce          Int
+  result         Json      // Game-specific result data
+  
+  isWin          Boolean
+  isAutoBet      Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+  
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([game, createdAt(sort: Desc)])
+  @@index([isWin, createdAt(sort: Desc)])
+}
+
+model GameSettings {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  game        GameType @unique
+  houseEdge   Float    @default(2.0)
+  minBet      Float    @default(1)
+  maxBet      Float    @default(10000)
+  isActive    Boolean  @default(true)
+  maxProfit   Float    @default(100000)
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?  @db.ObjectId
+}
+
+// ============================================
+// BONUS MODELS
+// ============================================
+
+model UserBonus {
+  id             String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId         String      @db.ObjectId
+  type           BonusType
+  amount         Float
+  wagerRequired  Float       // Total amount to wager before withdrawal
+  wagerCompleted Float       @default(0)
+  status         BonusStatus @default(ACTIVE)
+  expiresAt      DateTime?
+  claimedAt      DateTime    @default(now())
+  completedAt    DateTime?
+  
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, status])
+  @@index([status, expiresAt])
+}
+
+model ReferralReward {
+  id            String   @id @default(auto()) @map("_id") @db.ObjectId
+  referrerId    String   @db.ObjectId
+  referredId    String   @db.ObjectId
+  amount        Float
+  reason        String   // SIGNUP, FIRST_DEPOSIT, WAGERED
+  createdAt     DateTime @default(now())
+  
+  @@index([referrerId, createdAt(sort: Desc)])
+}
+
+// ============================================
+// NOTIFICATION MODELS
+// ============================================
+
+model Notification {
+  id          String             @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String             @db.ObjectId
+  type        NotificationType
+  title       String
+  message     String
+  data        Json?
+  isRead      Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId, isRead, createdAt(sort: Desc)])
+}
+
+// ============================================
+// AUDIT & LOGGING MODELS
+// ============================================
+
+model AuditLog {
+  id          String      @id @default(auto()) @map("_id") @db.ObjectId
+  userId      String?     @db.ObjectId
+  action      String      // LOGIN, DEPOSIT, WITHDRAWAL, BET_PLACED, ADMIN_ACTION, etc.
+  resource    String      // USER, TRANSACTION, BET, etc.
+  resourceId  String?
+  changes     Json?       // Before/after values
+  details     String?
+  ipAddress   String?
+  userAgent   String?
+  createdAt   DateTime    @default(now())
+  
+  user        User?       @relation(fields: [userId], references: [id])
+  
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([action, createdAt(sort: Desc)])
+  @@index([resource, createdAt(sort: Desc)])
+}
+
+// ============================================
+// SYSTEM MODELS
+// ============================================
+
+model SystemSettings {
+  id                    String   @id @default(auto()) @map("_id") @db.ObjectId
+  key                   String   @unique
+  value                 Json
+  description           String?
+  updatedAt             DateTime @updatedAt
+  updatedBy             String?  @db.ObjectId
+}
+
+// ============================================
+// CHAT MODELS
+// ============================================
+
+model ChatMessage {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String   @db.ObjectId
+  message   String
+  isSystem  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([createdAt(sort: Desc)])
+}
+
+// ============================================
+// EVENTS & RACES
+// ============================================
+
+model Race {
+  id          String     @id @default(auto()) @map("_id") @db.ObjectId
+  title       String
+  description String?
+  prizePool   Float
+  startTime   DateTime
+  endTime     DateTime
+  status      RaceStatus @default(UPCOMING)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  
+  @@index([status, startTime])
+  @@index([status, endTime])
+}
+
+enum RaceStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// ============================================
+// IDEMPOTENCY
+// ============================================
+
+model IdempotencyRequest {
+  key        String   @id @map("_id")
+  userId     String   @db.ObjectId
+  path       String
+  params     Json?
+  response   Json?
+  statusCode Int?
+  createdAt  DateTime @default(now())
+  lockedAt   DateTime @default(now())
+
+  @@index([userId, createdAt(sort: Desc)])
+}

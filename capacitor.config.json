@@ -1,0 +1,14 @@
+{
+  "appId": "com.mobilegamehub.app",
+  "appName": "Game Hub Mobile Casino",
+  "webDir": "out",
+  "server": {
+    "url": "http://10.90.193.101:3000",
+    "cleartext": true
+  },
+  "android": {
+    "allowMixedContent": true,
+    "captureInput": true,
+    "backgroundColor": "#111319"
+  }
+}

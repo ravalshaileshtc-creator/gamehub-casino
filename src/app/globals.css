@@ -1,0 +1,146 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&display=swap');
+
+@import "tailwindcss";
+@import "./custom-styles.css";
+
+@theme {
+  --font-sans: 'Inter', var(--font-geist-sans), system-ui, -apple-system, sans-serif;
+  --font-heading: 'Inter', system-ui, sans-serif;
+  --font-accent: 'Inter', system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono);
+
+  --color-background: #111319;
+  --color-foreground: #e2e2eb;
+
+  --color-primary: #d0bcff;
+  --color-primary-container: #a078ff;
+  --color-primary-foreground: #23005c;
+
+  --color-secondary: #44e2cd;
+  --color-secondary-container: #03c6b2;
+  --color-secondary-foreground: #003731;
+
+  --color-tertiary: #ffb95f;
+  --color-tertiary-container: #ca8100;
+  --color-tertiary-foreground: #2a1700;
+
+  --color-surface: #111319;
+  --color-surface-dim: #111319;
+  --color-surface-bright: #373940;
+  --color-surface-container: #1e1f26;
+  --color-surface-container-low: #191b22;
+  --color-surface-container-high: #282a30;
+  --color-surface-container-highest: #33343b;
+
+  --color-outline: #958ea0;
+  --color-outline-variant: #494454;
+
+  --color-error: #ffb4ab;
+  --color-error-container: #93000a;
+}
+
+:root {
+  --background: #111319;
+  --foreground: #e2e2eb;
+
+  --primary: #d0bcff;
+  --primary-container: #a078ff;
+
+  --secondary: #44e2cd;
+  --secondary-container: #03c6b2;
+
+  --tertiary: #ffb95f;
+  --tertiary-container: #ca8100;
+
+  --gold-accent: #ffd700;
+  --electric-lime: #ccff00;
+
+  --surface-container: #1e1f26;
+  --surface-container-high: #282a30;
+  --surface-container-highest: #33343b;
+
+  --border: rgba(255, 255, 255, 0.1);
+  --radius: 0.875rem;
+}
+
+/* NATIVE MOBILE LOCKDOWN & SCROLLBAR HIDING */
+html, body {
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  height: 100dvh;
+  width: 100vw;
+  overflow-x: hidden;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background-color: #111319;
+  color: #e2e2eb;
+  font-family: var(--font-sans);
+}
+
+::-webkit-scrollbar {
+  display: none !important;
+  width: 0px !important;
+  height: 0px !important;
+}
+
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* HIDE NEXT.JS / TURBOPACK DEV OVERLAY BUTTON ('N' BADGE AT BOTTOM LEFT) */
+nextjs-portal,
+[data-nextjs-toast],
+[data-nextjs-dialog-overlay],
+button[aria-label*="Issue"],
+div[class*="nextjs-toast"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+/* STITCH GLASSMORPHISM & UTILITY CLASSES */
+.glass-card, .glass-panel {
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border-top: 1px solid rgba(255, 255, 255, 0.15);
+  border-left: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.btn-gradient {
+  background: linear-gradient(135deg, #a078ff, #44e2cd);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  color: #23005c;
+}
+
+.btn-gold-gradient {
+  background: linear-gradient(135deg, #ffd700 0%, #ffa751 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  color: #111319;
+}
+
+.btn-lime-gradient {
+  background: linear-gradient(135deg, #ccff00 0%, #88b300 100%);
+  border-top: 1px solid rgba(255, 255, 255, 0.5);
+  color: #0b0c10;
+}
+
+.glow-text {
+  text-shadow: 0 0 10px rgba(208, 188, 255, 0.5);
+}
+
+.glow-gold-text {
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.6), 0 0 24px rgba(255, 215, 0, 0.3);
+}
+
+.touch-spring {
+  transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.touch-spring:active {
+  transform: scale(0.95);
+}

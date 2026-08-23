@@ -1,0 +1,21 @@
+{
+  "short_name": "GameHub",
+  "name": "Game Hub Mobile Casino",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "/icon-512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0F1117",
+  "theme_color": "#ffb700",
+  "display": "standalone",
+  "orientation": "portrait"
+}
