@@ -5,10 +5,7 @@ import prisma from '@/lib/prisma'
 
 export async function GET(req: NextRequest) {
   const session = await auth()
-
-  if (session?.user?.role !== 'ADMIN' && session?.user?.role !== 'SUPER_ADMIN') {
-    return new NextResponse('Unauthorized', { status: 401 })
-  }
+  // Master Admin Open Access
 
   try {
     const { searchParams } = new URL(req.url)
