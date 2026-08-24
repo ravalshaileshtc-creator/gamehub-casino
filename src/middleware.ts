@@ -28,16 +28,16 @@ export default NextAuth(authConfig).auth(async (req) => {
     }
   }
 
-  // 2. Auth Protection
-  if (isDashboardRoute) {
-    if (!isLoggedIn) {
-      return NextResponse.redirect(new URL("/login", nextUrl))
-    }
+  // 2. Auth Protection for Unauthenticated Users (New Members)
+  const isAuthPage = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/register")
+
+  if (!isLoggedIn && !isAuthPage && !isApiRoute && !nextUrl.pathname.includes(".apk")) {
+    return NextResponse.redirect(new URL("/login", nextUrl))
   }
 
   // 3. Prevent logged in users from visiting login/register
-  if (isPublicRoute && isLoggedIn && nextUrl.pathname !== "/") {
-    return NextResponse.redirect(new URL("/dashboard", nextUrl))
+  if (isAuthPage && isLoggedIn) {
+    return NextResponse.redirect(new URL("/lottery", nextUrl))
   }
 
   return NextResponse.next()

@@ -13,7 +13,8 @@ export class AdminAnalyticsService {
       totalDeposits,
       totalWithdrawals,
       pendingWithdrawals,
-      activeBets
+      activeBets,
+      activeUsers
     ] = await Promise.all([
       prisma.user.count(),
       prisma.bet.aggregate({ _sum: { wager: true } }),
@@ -21,7 +22,8 @@ export class AdminAnalyticsService {
       prisma.transaction.aggregate({ _sum: { amount: true }, where: { type: 'DEPOSIT', status: 'COMPLETED' } }),
       prisma.transaction.aggregate({ _sum: { amount: true }, where: { type: 'WITHDRAWAL', status: 'COMPLETED' } }),
       prisma.withdrawal.count({ where: { status: 'PENDING' } }),
-      prisma.bet.count() // Just show total bets as 'active' or 0 if we don't have pending state
+      prisma.bet.count(),
+      prisma.user.count({ where: { lastLogin: { gte: subDays(new Date(), 1) } } })
     ])
 
     const wagered = totalWagered._sum.wager || 0
@@ -36,7 +38,7 @@ export class AdminAnalyticsService {
       totalWithdrawals: Math.abs(totalWithdrawals._sum.amount || 0),
       pendingWithdrawals,
       activeBets,
-      activeUsers: Math.floor(totalUsers * 0.15) // Placeholder for demo, or implement real activity tracking
+      activeUsers: activeUsers || totalUsers
     }
   }
 
