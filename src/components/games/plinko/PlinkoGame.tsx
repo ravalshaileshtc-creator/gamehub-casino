@@ -498,18 +498,40 @@ export default function PlinkoGame() {
       if (autoDropIntervalRef.current) clearInterval(autoDropIntervalRef.current)
     }
   }, [isAutoDrop, wager])
-
   const singleWager = parseFloat(wager) || 10
   const burstWager = singleWager * 5
+
+  // Synchronize Global Epoch Round ID & Timer across all devices & Master Admin
+  const [roundId, setRoundId] = useState<number>(44698492)
+  const [timeLeft, setTimeLeft] = useState<number>(27)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Math.floor(Date.now() / 1000)
+      const cycle = now % 30
+      const currentRoundId = 44698000 + Math.floor(now / 30)
+      setRoundId(currentRoundId)
+      setTimeLeft(30 - cycle)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   return (
     <div className="h-full w-full overflow-hidden flex flex-col justify-between p-1 text-white gap-2 max-w-lg mx-auto">
       
       {/* Top Header Bar matching Stitch UI */}
-      <div className="flex justify-between items-center px-2.5 py-1.5 bg-[#1e1f26] rounded-xl border border-white/5 shrink-0">
-        <h2 className="text-sm font-extrabold text-[#d0bcff] flex items-center gap-1.5 font-sans">
-          🎯 PLINKO PRO
-        </h2>
+      <div className="flex justify-between items-center bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 shrink-0">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-extrabold text-[#d0bcff] flex items-center gap-1.5 font-sans">
+            🎯 PLINKO PRO
+          </h2>
+          <span className="text-[10px] font-mono text-amber-400 font-bold bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
+            #{roundId}
+          </span>
+          <span className="text-[10px] font-mono text-emerald-400 font-bold bg-emerald-400/10 px-1.5 py-0.5 rounded border border-emerald-400/20">
+            00:{timeLeft < 10 ? `0${timeLeft}` : timeLeft}
+          </span>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-[10px] text-gray-400 font-bold uppercase font-mono">Streak: 🔥 {winStreak}</span>
           <button

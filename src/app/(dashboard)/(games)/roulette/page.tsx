@@ -64,6 +64,21 @@ export default function EuropeanRouletteGame() {
     { num: 4, color: 'black' }
   ])
 
+  // Synchronize Global Epoch Round ID & Timer across all devices & Master Admin
+  const [roundId, setRoundId] = useState<number>(44698492)
+  const [timeLeft, setTimeLeft] = useState<number>(27)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Math.floor(Date.now() / 1000)
+      const cycle = now % 30
+      const currentRoundId = 44698000 + Math.floor(now / 30)
+      setRoundId(currentRoundId)
+      setTimeLeft(30 - cycle)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number | null>(null)
 

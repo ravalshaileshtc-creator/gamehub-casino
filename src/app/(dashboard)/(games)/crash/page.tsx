@@ -34,8 +34,21 @@ export default function CrashPage() {
   const [countdown, setCountdown] = useState(5)
   const [multiplier, setMultiplier] = useState(1.00)
   const [crashPoint, setCrashPoint] = useState(2.50)
-  const [roundId, setRoundId] = useState(8821)
-  
+  const [roundId, setRoundId] = useState(44698492)
+  const [timeLeft, setTimeLeft] = useState(27)
+
+  // Synchronize Global Epoch Round ID & Timer across all devices & Master Admin
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Math.floor(Date.now() / 1000)
+      const cycle = now % 30
+      const currentRoundId = 44698000 + Math.floor(now / 30)
+      setRoundId(currentRoundId)
+      setTimeLeft(30 - cycle)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
+
   // Wager & Bet State
   const [betAmount, setBetAmount] = useState<number>(100)
   const [autoCashout, setAutoCashout] = useState<number>(2.00)

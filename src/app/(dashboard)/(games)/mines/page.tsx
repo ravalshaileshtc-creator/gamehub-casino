@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Bomb, Gem, Play, Sparkles, RefreshCw } from 'lucide-react'
 import { useWallet } from '@/context/WalletContext'
@@ -24,6 +24,21 @@ export default function MinesGame() {
   const [gameOver, setGameOver] = useState(false)
   const [currentMultiplier, setCurrentMultiplier] = useState(1.00)
   const [sessionMines, setSessionMines] = useState<number[]>([])
+
+  // Synchronize Global Epoch Round ID & Timer across all devices & Master Admin
+  const [roundId, setRoundId] = useState<number>(44698492)
+  const [timeLeft, setTimeLeft] = useState<number>(27)
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const now = Math.floor(Date.now() / 1000)
+      const cycle = now % 30
+      const currentRoundId = 44698000 + Math.floor(now / 30)
+      setRoundId(currentRoundId)
+      setTimeLeft(30 - cycle)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [])
 
   const startGame = async () => {
     if (wager <= 0 || playing) return
