@@ -105,14 +105,15 @@ export default function RealisticLuckyBallGame() {
     time: string
     betTypeLabel: string
     wager: number
-    winningBall: number
+    winningBall: number | null
     payout: number
+    status: 'PENDING' | 'WIN' | 'LOSS'
     isWin: boolean
   }>>([
-    { id: 'b_101', roundId: 9104, time: '22:38:12', betTypeLabel: '0 / 5 BET', wager: 100, winningBall: 5, payout: 450, isWin: true },
-    { id: 'b_102', roundId: 9103, time: '22:37:32', betTypeLabel: '1 - 5 RANGE', wager: 50, winningBall: 2, payout: 90, isWin: true },
-    { id: 'b_103', roundId: 9102, time: '22:36:52', betTypeLabel: 'SINGLE (0-9)', wager: 100, winningBall: 9, payout: 0, isWin: false },
-    { id: 'b_104', roundId: 9101, time: '22:36:12', betTypeLabel: '6 - 9 RANGE', wager: 200, winningBall: 7, payout: 450, isWin: true },
+    { id: 'b_101', roundId: 9104, time: '22:38:12', betTypeLabel: '0 / 5 BET', wager: 100, winningBall: 5, payout: 450, status: 'WIN', isWin: true },
+    { id: 'b_102', roundId: 9103, time: '22:37:32', betTypeLabel: '1 - 5 RANGE', wager: 50, winningBall: 2, payout: 90, status: 'WIN', isWin: true },
+    { id: 'b_103', roundId: 9102, time: '22:36:52', betTypeLabel: 'SINGLE (0-9)', wager: 100, winningBall: 9, payout: 0, status: 'LOSS', isWin: false },
+    { id: 'b_104', roundId: 9101, time: '22:36:12', betTypeLabel: '6 - 9 RANGE', wager: 200, winningBall: 7, payout: 450, status: 'WIN', isWin: true },
   ])
 
   // Live Admin Override Settings from Firebase Firestore
@@ -648,7 +649,33 @@ export default function RealisticLuckyBallGame() {
 
     setHistory(prev => [winNum, ...prev.slice(0, 7)])
 
-    const newHistoryEntries = myBets.map(b => {
+    // Update 24-Hour Bet History entries from PENDING to WIN or LOSS
+    setBetHistory24h(prev => prev.map(entry => {
+      if (entry.roundId === roundId) {
+        const betObj = myBets.find(b => b.id === entry.id)
+        if (betObj) {
+          let won = false
+          let mult = 0
+          if (betObj.betType === 'SINGLE' && betObj.selectedNumber === winNum) { won = true; mult = 9.0 }
+          else if (betObj.betType === 'RANGE_1_5' && winNum >= 1 && winNum <= 5) { won = true; mult = 1.8 }
+          else if (betObj.betType === 'RANGE_6_9' && winNum >= 6 && winNum <= 9) { won = true; mult = 2.25 }
+          else if (betObj.betType === 'ZERO_FIVE' && (winNum === 0 || winNum === 5)) { won = true; mult = 4.5 }
+
+          const payout = won ? +(betObj.amount * mult).toFixed(2) : 0
+          return {
+            ...entry,
+            winningBall: winNum,
+            payout,
+            status: (won ? 'WIN' : 'LOSS') as 'WIN' | 'LOSS',
+            isWin: won
+          }
+        }
+      }
+      return entry
+    }))
+
+    // Sync status updates to Firebase Firestore for Admin
+    myBets.forEach(async (b) => {
       let won = false
       let mult = 0
       if (b.betType === 'SINGLE' && b.selectedNumber === winNum) { won = true; mult = 9.0 }
@@ -657,21 +684,19 @@ export default function RealisticLuckyBallGame() {
       else if (b.betType === 'ZERO_FIVE' && (winNum === 0 || winNum === 5)) { won = true; mult = 4.5 }
 
       const payout = won ? +(b.amount * mult).toFixed(2) : 0
-      return {
-        id: b.id,
-        roundId: b.roundId,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        betTypeLabel: BET_TYPES_CONFIG[b.betType].label,
-        wager: b.amount,
-        winningBall: winNum,
-        payout,
-        isWin: won
+
+      try {
+        const bDocRef = doc(db, 'bets', b.id)
+        await setDoc(bDocRef, {
+          winningBall: winNum,
+          payout,
+          status: won ? 'WIN' : 'LOSS',
+          isWin: won
+        }, { merge: true })
+      } catch (e) {
+        console.warn('Firebase Bet Result Sync:', e)
       }
     })
-
-    if (newHistoryEntries.length > 0) {
-      setBetHistory24h(prev => [...newHistoryEntries, ...prev].slice(0, 50))
-    }
 
     if (myBets.length > 0) {
       setResultModal({
@@ -747,6 +772,21 @@ export default function RealisticLuckyBallGame() {
     setMyBets(prev => [...prev, newBet])
     setTotalPool(p => p + wager)
 
+    // Add Pending Entry to 24-Hour Bet History Table immediately
+    const pendingHistoryEntry = {
+      id: newBet.id,
+      roundId,
+      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      betTypeLabel: BET_TYPES_CONFIG[selectedBetType].label,
+      wager,
+      winningBall: null,
+      payout: 0,
+      status: 'PENDING' as const,
+      isWin: false
+    }
+
+    setBetHistory24h(prev => [pendingHistoryEntry, ...prev].slice(0, 50))
+
     const labelStr = selectedBetType === 'SINGLE' 
       ? `SINGLE #${selectedSingleNumber}` 
       : selectedBetType
@@ -770,6 +810,7 @@ export default function RealisticLuckyBallGame() {
         betType: selectedBetType,
         selectedNumber: selectedBetType === 'SINGLE' ? selectedSingleNumber : null,
         amount: wager,
+        status: 'PENDING',
         timestamp: new Date().toISOString()
       }, { merge: true })
     } catch (e) {
@@ -1044,21 +1085,30 @@ export default function RealisticLuckyBallGame() {
                     <td className="py-1 px-1 text-gray-400">{rec.time}</td>
                     <td className="py-1 px-1 font-bold text-white">{rec.betTypeLabel}</td>
                     <td className="py-1 px-1 text-center font-black">
-                      <span className={`inline-block px-1.5 py-0.2 rounded-full text-[8px] text-black ${
-                        rec.winningBall % 2 === 0 ? 'bg-[#2D8CFF]' : 'bg-[#FF8C1A]'
-                      }`}>
-                        #{rec.winningBall}
-                      </span>
+                      {rec.status === 'PENDING' || rec.winningBall === null ? (
+                        <span className="inline-block px-1.5 py-0.2 rounded-full text-[8px] bg-yellow-950 text-yellow-400 border border-yellow-500/40">
+                          ⏳ WAITING
+                        </span>
+                      ) : (
+                        <span className={`inline-block px-1.5 py-0.2 rounded-full text-[8px] text-black ${
+                          rec.winningBall % 2 === 0 ? 'bg-[#2D8CFF]' : 'bg-[#FF8C1A]'
+                        }`}>
+                          #{rec.winningBall}
+                        </span>
+                      )}
                     </td>
                     <td className="py-1 px-1 text-right text-gray-300">₹{rec.wager}</td>
-                    <td className={`py-1 px-1 text-right font-bold ${rec.isWin ? 'text-emerald-400' : 'text-gray-500'}`}>
-                      ₹{rec.payout.toFixed(2)}
+                    <td className={`py-1 px-1 text-right font-bold ${
+                      rec.status === 'PENDING' ? 'text-yellow-400 animate-pulse' : rec.isWin ? 'text-emerald-400' : 'text-gray-500'
+                    }`}>
+                      {rec.status === 'PENDING' ? '⏳ PENDING' : `₹${rec.payout.toFixed(2)}`}
                     </td>
                     <td className="py-1 px-2 text-center">
                       <span className={`px-1.5 py-0.5 rounded text-[8px] font-black uppercase ${
+                        rec.status === 'PENDING' ? 'bg-yellow-950/80 text-yellow-400 border border-yellow-500/50 animate-pulse' :
                         rec.isWin ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' : 'bg-red-950 text-red-400 border border-red-500/30'
                       }`}>
-                        {rec.isWin ? 'WIN' : 'LOSS'}
+                        {rec.status === 'PENDING' ? '⏳ PENDING' : rec.isWin ? 'WIN' : 'LOSS'}
                       </span>
                     </td>
                   </tr>

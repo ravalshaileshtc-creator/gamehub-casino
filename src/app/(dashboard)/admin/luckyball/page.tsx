@@ -347,29 +347,42 @@ export default function MasterAdminLuckyBallPage() {
                 <th className="py-2 px-2">Bet Type</th>
                 <th className="py-2 px-2 text-center">Selected #</th>
                 <th className="py-2 px-3 text-right">Wager (₹)</th>
+                <th className="py-2 px-3 text-center">Status</th>
                 <th className="py-2 px-3 text-right">Time</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5 text-gray-300">
               {liveBets.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-4 text-center text-gray-500">No live bets recorded yet</td>
+                  <td colSpan={7} className="py-4 text-center text-gray-500">No live bets recorded yet</td>
                 </tr>
               ) : (
-                liveBets.map(b => (
-                  <tr key={b.id} className="hover:bg-white/5 transition-colors">
-                    <td className="py-2 px-3 font-bold text-gray-400">{b.betId || b.id}</td>
-                    <td className="py-2 px-2 text-[#F7B500] font-bold">#{b.roundId}</td>
-                    <td className="py-2 px-2 font-bold text-white">{b.betType}</td>
-                    <td className="py-2 px-2 text-center font-bold">
-                      {b.selectedNumber !== null ? `#${b.selectedNumber}` : 'ALL'}
-                    </td>
-                    <td className="py-2 px-3 text-right font-black text-emerald-400">₹{b.amount}</td>
-                    <td className="py-2 px-3 text-right text-gray-400 text-[10px]">
-                      {b.timestamp ? new Date(b.timestamp).toLocaleTimeString() : 'NOW'}
-                    </td>
-                  </tr>
-                ))
+                liveBets.map(b => {
+                  const bStatus = b.status || (b.isWin === true ? 'WIN' : b.isWin === false ? 'LOSS' : 'PENDING')
+                  return (
+                    <tr key={b.id} className="hover:bg-white/5 transition-colors">
+                      <td className="py-2 px-3 font-bold text-gray-400">{b.betId || b.id}</td>
+                      <td className="py-2 px-2 text-[#F7B500] font-bold">#{b.roundId}</td>
+                      <td className="py-2 px-2 font-bold text-white">{b.betType}</td>
+                      <td className="py-2 px-2 text-center font-bold">
+                        {b.selectedNumber !== null ? `#${b.selectedNumber}` : 'ALL'}
+                      </td>
+                      <td className="py-2 px-3 text-right font-black text-emerald-400">₹{b.amount}</td>
+                      <td className="py-2 px-3 text-center font-bold">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                          bStatus === 'PENDING' ? 'bg-yellow-950/80 text-yellow-400 border border-yellow-500/50 animate-pulse' :
+                          bStatus === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' :
+                          'bg-red-950 text-red-400 border border-red-500/30'
+                        }`}>
+                          {bStatus === 'PENDING' ? '⏳ PENDING' : bStatus === 'WIN' ? '🟢 WIN' : '🔴 LOSS'}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right text-gray-400 text-[10px]">
+                        {b.timestamp ? new Date(b.timestamp).toLocaleTimeString() : 'NOW'}
+                      </td>
+                    </tr>
+                  )
+                })
               )}
             </tbody>
           </table>
