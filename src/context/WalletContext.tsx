@@ -24,12 +24,12 @@ interface WalletContextType {
   refreshWallet: () => Promise<void>
 }
 
-const DEFAULT_BALANCE = 10000.0
+const DEFAULT_BALANCE = 0.0
 
 const WalletContext = createContext<WalletContextType | undefined>(undefined)
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [balance, setBalance] = useState<number>(DEFAULT_BALANCE)
+  const [balance, setBalance] = useState<number>(0.0)
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
 
@@ -77,7 +77,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
     let currentBal = balance
     if (currentBal < amount) {
-      currentBal += 1000.0 // Auto-refill demo coins!
+      return false // Insufficient real balance!
     }
 
     const balanceBefore = currentBal
