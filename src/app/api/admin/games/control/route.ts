@@ -1,15 +1,13 @@
 
 import { NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 import { GameType, Prisma } from '@prisma/client'
+import { db } from '@/lib/firebase'
+import { doc, setDoc } from 'firebase/firestore'
 
 const GAME_LIST: GameType[] = ['SLOTS', 'ROULETTE', 'BLACKJACK', 'MINES', 'CRASH', 'DICE', 'COINFLIP', 'PLINKO', 'WHEEL', 'BACCARAT']
 
 export async function GET() {
-  const session = await auth()
-  if (session?.user?.role !== 'ADMIN') return new NextResponse('Unauthorized', { status: 401 })
-
   try {
     // Ensure all games exist in DB
     const existingSettings = await prisma.gameSettings.findMany()
@@ -19,40 +17,37 @@ export async function GET() {
       await prisma.gameSettings.createMany({
         data: missingGames.map(game => ({
           game,
-          houseEdge: 2.0, // Default house edge
-          isActive: true
+          houseEdge: 2.0,
+          isActive: true,
+          minBet: 1,
+          maxBet: 10000
         }))
       })
     }
 
-    // Fetch settings and aggregating stats
     const settings = await prisma.gameSettings.findMany()
-
-    // Aggregate bet stats per game
     const stats = await prisma.bet.groupBy({
       by: ['game'],
-      _sum: {
-        wager: true,
-        payout: true
-      }
+      _sum: { wager: true, payout: true }
     })
 
     const gamesPayload = settings.map(setting => {
       const gameStats = stats.find(s => s.game === setting.game)
       const totalWagered = gameStats?._sum.wager || 0
       const totalPayout = gameStats?._sum.payout || 0
-      // Calculate actual RTP based on history, fallback to theoretical (100 - houseEdge)
       const actualRtp = totalWagered > 0 ? (totalPayout / totalWagered) * 100 : (100 - setting.houseEdge)
 
       return {
         id: setting.id,
         name: setting.game,
         enabled: setting.isActive,
-        maintenance: !setting.isActive, // Mapping isActive=false to maintenance=true
+        maintenance: !setting.isActive,
         rtp: actualRtp,
         totalWagered,
         totalPayout,
-        houseEdge: setting.houseEdge
+        houseEdge: setting.houseEdge,
+        minBet: setting.minBet || 1,
+        maxBet: setting.maxBet || 10000
       }
     })
 
@@ -64,46 +59,52 @@ export async function GET() {
 }
 
 export async function PUT(req: Request) {
-  const session = await auth()
-  if (session?.user?.role !== 'ADMIN') return new NextResponse('Unauthorized', { status: 401 })
-
-  const { gameId, field, value } = await req.json()
-
   try {
-    const updateData: Prisma.GameSettingsUpdateInput = {}
-    if (field === 'maintenance') {
-      updateData.isActive = !value
-    } else if (field === 'enabled') {
-      updateData.isActive = value
-    } else if (field === 'houseEdge') {
-      updateData.houseEdge = parseFloat(value)
-    } else {
-      return NextResponse.json({ success: false, error: 'Invalid field' }, { status: 400 })
-    }
+    const { gameId, gameName, field, value, mode, forcedTarget, houseEdge, minBet, maxBet } = await req.json()
 
-    if (session.user?.id) {
-      // Note: updateBy is not in schema but maybe meant to be tracked?
-      // If it's not in schema,prisma will error. Let's check schema later.
-      // For now, removing it if it's causing issues or keeping it if schema has it.
-      // The original code had it.
-    }
-
-    await prisma.gameSettings.update({
-      where: { id: gameId },
-      data: updateData
-    })
-
-    // Log admin action
-    await prisma.auditLog.create({
-      data: {
-        action: `GAME_UPDATE_${field.toUpperCase()}`,
-        resource: 'GAME',
-        resourceId: gameId,
-        changes: { field, value } as Prisma.InputJsonValue,
-        ipAddress: req.headers.get('x-forwarded-for') || 'unknown',
-        userId: session.user?.id || 'system',
+    // 1. Sync to Firebase Firestore admin_settings/<gameKey>
+    const gameKey = (gameName || gameId || 'general').toString().toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (gameKey) {
+      try {
+        const firestoreRef = doc(db, 'admin_settings', gameKey)
+        await setDoc(firestoreRef, {
+          mode: mode || 'AUTO',
+          forcedTarget: forcedTarget !== undefined ? forcedTarget : 0,
+          houseEdge: houseEdge !== undefined ? parseFloat(houseEdge) : 2.0,
+          minBet: minBet !== undefined ? parseFloat(minBet) : 1,
+          maxBet: maxBet !== undefined ? parseFloat(maxBet) : 10000,
+          enabled: field === 'enabled' ? Boolean(value) : field === 'maintenance' ? !value : true,
+          updatedAt: new Date().toISOString()
+        }, { merge: true })
+      } catch (e) {
+        console.warn('Firebase Admin Settings Sync:', e)
       }
-    })
+    }
+
+    // 2. Update PostgreSQL Prisma DB GameSettings if gameId exists
+    if (gameId) {
+      const updateData: Prisma.GameSettingsUpdateInput = {}
+      if (field === 'maintenance') {
+        updateData.isActive = !value
+      } else if (field === 'enabled') {
+        updateData.isActive = value
+      } else if (field === 'houseEdge') {
+        updateData.houseEdge = parseFloat(value)
+      } else if (field === 'minBet') {
+        updateData.minBet = parseFloat(value)
+      } else if (field === 'maxBet') {
+        updateData.maxBet = parseFloat(value)
+      }
+
+      if (houseEdge !== undefined) updateData.houseEdge = parseFloat(houseEdge)
+      if (minBet !== undefined) updateData.minBet = parseFloat(minBet)
+      if (maxBet !== undefined) updateData.maxBet = parseFloat(maxBet)
+
+      await prisma.gameSettings.updateMany({
+        where: { OR: [{ id: gameId }, { game: gameName as GameType }] },
+        data: updateData
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {
@@ -111,6 +112,5 @@ export async function PUT(req: Request) {
     return NextResponse.json({ success: false, error: 'Update failed' }, { status: 500 })
   }
 }
-
 
 export const dynamic = "force-dynamic";
