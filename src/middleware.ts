@@ -28,16 +28,15 @@ export default NextAuth(authConfig).auth(async (req) => {
     }
   }
 
-  // 2. Auth Protection for Unauthenticated Users (New Members)
+  // 2. Auth Cookie Check (NextAuth OR custom auth cookie)
+  const hasAuthCookie = req.cookies.has("auth_session") || req.cookies.has("next-auth.session-token") || req.cookies.has("__Secure-next-auth.session-token")
+  const hasAuth = isLoggedIn || hasAuthCookie
+
   const isAuthPage = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/register")
 
-  if (!isLoggedIn && !isAuthPage && !isApiRoute && !nextUrl.pathname.includes(".apk")) {
+  // Protect sensitive dashboard/admin routes if no auth cookie or session
+  if (!hasAuth && (nextUrl.pathname.startsWith("/dashboard") || nextUrl.pathname.startsWith("/admin"))) {
     return NextResponse.redirect(new URL("/login", nextUrl))
-  }
-
-  // 3. Prevent logged in users from visiting login/register
-  if (isAuthPage && isLoggedIn) {
-    return NextResponse.redirect(new URL("/lottery", nextUrl))
   }
 
   return NextResponse.next()

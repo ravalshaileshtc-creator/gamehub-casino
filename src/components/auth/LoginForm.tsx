@@ -59,8 +59,9 @@ export function LoginForm() {
           const formattedName = email.split('@')[0]
           localStorage.setItem('user_email', email)
           localStorage.setItem('user_name', formattedName.charAt(0).toUpperCase() + formattedName.slice(1))
+          document.cookie = "auth_session=true; path=/; max-age=864000"
         }
-        window.location.href = "/dashboard"
+        router.push("/dashboard")
       }
     } catch {
       setError("An error occurred during login")

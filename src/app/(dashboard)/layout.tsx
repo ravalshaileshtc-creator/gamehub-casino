@@ -22,10 +22,10 @@ export default function DashboardLayout({
       const localEmail = localStorage.getItem('user_email')
       const isAuthPage = pathname.startsWith('/login') || pathname.startsWith('/register')
       if (!session?.user && !localEmail && !isAuthPage) {
-        window.location.href = '/login'
+        router.replace('/login')
       }
     }
-  }, [session, pathname])
+  }, [session, pathname, router])
 
   const isGamePage = [
     '/plinko', '/crash', '/roulette', '/slots', '/mines', 
