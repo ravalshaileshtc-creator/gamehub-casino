@@ -7,10 +7,10 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { 
-  Gamepad2, Cpu, ShieldAlert, Crown, Flame, Sliders 
+  Gamepad2, Cpu, ShieldAlert, Crown, Flame, Sliders, Activity 
 } from 'lucide-react'
 import { db } from '@/lib/firebase'
-import { doc, onSnapshot, setDoc } from 'firebase/firestore'
+import { doc, onSnapshot, setDoc, query, collection, orderBy, limit } from 'firebase/firestore'
 
 const ALL_GAMES_MASTER = [
   {
@@ -356,6 +356,164 @@ export function GameControlPanel() {
             </Card>
           )
         })}
+      </div>
+
+      {/* REAL-TIME LIVE PLAYER BET STREAM FOR ALL 10 GAMES */}
+      <AllGamesRealtimeBetStream />
+
+    </div>
+  )
+}
+
+function AllGamesRealtimeBetStream() {
+  const [bets, setBets] = useState<Array<any>>([])
+  const [selectedFilter, setSelectedFilter] = useState<string>('ALL')
+
+  useEffect(() => {
+    try {
+      const q = query(collection(db, 'bets'), orderBy('timestamp', 'desc'), limit(60))
+      const unsub = onSnapshot(q, (snap) => {
+        const list: any[] = []
+        snap.forEach(doc => list.push({ id: doc.id, ...doc.data() }))
+        setBets(list)
+      }, (e) => {
+        console.warn('Firebase All Games Bet Stream Note:', e)
+      })
+      return () => unsub()
+    } catch (e) {
+      console.warn('Firebase query init:', e)
+    }
+  }, [])
+
+  const filteredBets = bets.filter(b => {
+    if (selectedFilter === 'ALL') return true
+    const gKey = (b.game || b.gameType || b.betType || '').toString().toUpperCase()
+    return gKey.includes(selectedFilter) || selectedFilter.includes(gKey)
+  })
+
+  // Summary Metrics
+  const totalWagered = filteredBets.reduce((acc, b) => acc + (b.amount || b.wager || 0), 0)
+  const totalPayout = filteredBets.reduce((acc, b) => acc + (b.payout || 0), 0)
+  const pendingCount = filteredBets.filter(b => (b.status || (b.isWin === undefined ? 'PENDING' : '')) === 'PENDING').length
+
+  return (
+    <div className="bg-[#121826] p-6 rounded-3xl border border-white/10 space-y-5 shadow-2xl">
+      
+      {/* Header & Metrics */}
+      <div className="flex flex-wrap justify-between items-center gap-4 border-b border-white/10 pb-4">
+        <div>
+          <h3 className="text-base font-black text-white uppercase tracking-wider flex items-center gap-2 font-orbitron">
+            <Activity className="w-5 h-5 text-emerald-400 animate-pulse" /> REAL-TIME LIVE PLAYER BET STREAM (ALL 10 GAMES)
+          </h3>
+          <p className="text-xs text-gray-400 font-mono mt-0.5">
+            Streaming live wagers, outcomes, and pending status across Plinko, Lucky Ball, Crash, Mines & Casino
+          </p>
+        </div>
+
+        <div className="flex flex-wrap gap-2 text-xs font-mono">
+          <div className="px-3 py-1.5 rounded-xl bg-black/50 border border-white/10">
+            <span className="text-gray-400">TOTAL LIVE WAGER: </span>
+            <span className="font-bold text-[#F7B500]">₹{totalWagered.toFixed(2)}</span>
+          </div>
+          <div className="px-3 py-1.5 rounded-xl bg-black/50 border border-white/10">
+            <span className="text-gray-400">TOTAL PAYOUT: </span>
+            <span className="font-bold text-emerald-400">₹{totalPayout.toFixed(2)}</span>
+          </div>
+          <div className="px-3 py-1.5 rounded-xl bg-yellow-950/80 border border-yellow-500/40 text-yellow-300 font-bold animate-pulse">
+            ⏳ PENDING: {pendingCount}
+          </div>
+        </div>
+      </div>
+
+      {/* Game Filter Pills */}
+      <div className="flex flex-wrap gap-1.5 text-[10px] font-mono font-bold">
+        {['ALL', 'LOTTERY', 'PLINKO', 'CRASH', 'MINES', 'COINFLIP', 'ROULETTE', 'SLOTS', 'DICE', 'DRAGONTOWER', 'PENALTY'].map((f) => (
+          <button
+            key={f}
+            onClick={() => setSelectedFilter(f)}
+            className={`px-3 py-1.5 rounded-xl uppercase transition-all cursor-pointer ${
+              selectedFilter === f
+                ? 'bg-purple-600 text-white shadow-lg shadow-purple-600/40 border border-white'
+                : 'bg-black/40 text-gray-400 hover:text-white border border-white/10'
+            }`}
+          >
+            {f === 'ALL' ? '🌐 ALL GAMES' : f}
+          </button>
+        ))}
+      </div>
+
+      {/* Live Stream Table */}
+      <div className="overflow-x-auto max-h-80 rounded-2xl border border-white/10 bg-black/50">
+        <table className="w-full text-left text-xs font-mono border-collapse">
+          <thead className="bg-[#182338] text-gray-400 uppercase sticky top-0">
+            <tr>
+              <th className="py-2.5 px-3">Bet ID</th>
+              <th className="py-2.5 px-2">Game</th>
+              <th className="py-2.5 px-2">Player</th>
+              <th className="py-2.5 px-2 text-right">Wager (₹)</th>
+              <th className="py-2.5 px-2 text-center">Selection / Target</th>
+              <th className="py-2.5 px-3 text-right">Payout (₹)</th>
+              <th className="py-2.5 px-3 text-center">Status</th>
+              <th className="py-2.5 px-3 text-right">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 text-gray-300">
+            {filteredBets.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="py-8 text-center text-gray-500 font-mono">
+                  No live bets recorded in real-time stream for filter "{selectedFilter}"
+                </td>
+              </tr>
+            ) : (
+              filteredBets.map((b) => {
+                const bStatus = b.status || (b.isWin === true ? 'WIN' : b.isWin === false ? 'LOSS' : 'PENDING')
+                const gName = (b.game || b.gameType || b.betType || 'GAME').toString().toUpperCase()
+                const wagerAmt = b.amount || b.wager || 0
+                const payoutAmt = b.payout || 0
+
+                return (
+                  <tr key={b.id} className="hover:bg-white/5 transition-colors">
+                    <td className="py-2.5 px-3 font-bold text-gray-400 text-[11px]">{b.betId || b.id}</td>
+
+                    <td className="py-2.5 px-2 font-bold">
+                      <span className="px-2 py-0.5 rounded-lg bg-purple-950 text-purple-300 border border-purple-500/30 text-[10px]">
+                        {gName}
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-2 text-white font-bold">{b.userEmail || b.userName || 'Player'}</td>
+
+                    <td className="py-2.5 px-2 text-right font-black text-amber-400">₹{wagerAmt}</td>
+
+                    <td className="py-2.5 px-2 text-center font-bold text-gray-300">
+                      {b.selectedNumber !== undefined && b.selectedNumber !== null ? `#${b.selectedNumber}` :
+                       b.selectedOption ? String(b.selectedOption) :
+                       b.multiplier ? `${b.multiplier}x` : 'STANDARD'}
+                    </td>
+
+                    <td className={`py-2.5 px-3 text-right font-black ${bStatus === 'WIN' ? 'text-emerald-400' : 'text-gray-500'}`}>
+                      ₹{payoutAmt.toFixed(2)}
+                    </td>
+
+                    <td className="py-2.5 px-3 text-center font-bold">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase ${
+                        bStatus === 'PENDING' ? 'bg-yellow-950/90 text-yellow-300 border border-yellow-500/50 animate-pulse' :
+                        bStatus === 'WIN' ? 'bg-emerald-950 text-emerald-300 border border-emerald-500/50' :
+                        'bg-red-950 text-red-400 border border-red-500/30'
+                      }`}>
+                        {bStatus === 'PENDING' ? '⏳ PENDING' : bStatus === 'WIN' ? '🟢 WIN' : '🔴 LOSS'}
+                      </span>
+                    </td>
+
+                    <td className="py-2.5 px-3 text-right text-gray-400 text-[10px]">
+                      {b.timestamp ? new Date(b.timestamp).toLocaleTimeString() : 'NOW'}
+                    </td>
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
       </div>
 
     </div>
