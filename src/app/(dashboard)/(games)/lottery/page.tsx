@@ -803,14 +803,22 @@ export default function RealisticLuckyBallGame() {
     }, 3500)
 
     try {
+      const uEmail = typeof window !== 'undefined' ? localStorage.getItem('user_email') || 'player@gamehub.com' : 'player@gamehub.com'
+      const uName = typeof window !== 'undefined' ? localStorage.getItem('user_name') || uEmail.split('@')[0] : uEmail.split('@')[0]
+
       const bDocRef = doc(db, 'bets', newBet.id)
       await setDoc(bDocRef, {
         betId: newBet.id,
         roundId,
+        game: 'LUCKYBALL',
+        gameType: 'LUCKYBALL',
         betType: selectedBetType,
         selectedNumber: selectedBetType === 'SINGLE' ? selectedSingleNumber : null,
         amount: wager,
+        wager,
         status: 'PENDING',
+        userEmail: uEmail,
+        userName: uName,
         timestamp: new Date().toISOString()
       }, { merge: true })
     } catch (e) {

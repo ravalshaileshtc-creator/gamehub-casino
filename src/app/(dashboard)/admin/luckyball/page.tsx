@@ -343,6 +343,7 @@ export default function MasterAdminLuckyBallPage() {
             <thead className="bg-[#182338] text-gray-400 uppercase sticky top-0">
               <tr>
                 <th className="py-2 px-3">Bet ID</th>
+                <th className="py-2 px-2">Player</th>
                 <th className="py-2 px-2">Round #</th>
                 <th className="py-2 px-2">Bet Type</th>
                 <th className="py-2 px-2 text-center">Selected #</th>
@@ -354,14 +355,16 @@ export default function MasterAdminLuckyBallPage() {
             <tbody className="divide-y divide-white/5 text-gray-300">
               {liveBets.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-4 text-center text-gray-500">No live bets recorded yet</td>
+                  <td colSpan={8} className="py-4 text-center text-gray-500">No live bets recorded yet</td>
                 </tr>
               ) : (
                 liveBets.map(b => {
                   const bStatus = b.status || (b.isWin === true ? 'WIN' : b.isWin === false ? 'LOSS' : 'PENDING')
+                  const pName = b.userName || (b.userEmail ? b.userEmail.split('@')[0] : 'Real Player')
                   return (
                     <tr key={b.id} className="hover:bg-white/5 transition-colors">
-                      <td className="py-2 px-3 font-bold text-gray-400">{b.betId || b.id}</td>
+                      <td className="py-2 px-3 font-bold text-gray-400 text-[11px]">{b.betId || b.id}</td>
+                      <td className="py-2 px-2 text-white font-bold">{pName}</td>
                       <td className="py-2 px-2 text-[#F7B500] font-bold">#{b.roundId}</td>
                       <td className="py-2 px-2 font-bold text-white">{b.betType}</td>
                       <td className="py-2 px-2 text-center font-bold">

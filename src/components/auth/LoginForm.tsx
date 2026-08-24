@@ -55,6 +55,11 @@ export function LoginForm() {
       if (result?.error) {
         setError("Invalid email or password")
       } else {
+        if (typeof window !== 'undefined') {
+          const formattedName = email.split('@')[0]
+          localStorage.setItem('user_email', email)
+          localStorage.setItem('user_name', formattedName.charAt(0).toUpperCase() + formattedName.slice(1))
+        }
         window.location.href = "/dashboard"
       }
     } catch {

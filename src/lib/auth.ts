@@ -25,54 +25,37 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(credentials.email).toLowerCase().trim();
         const password = String(credentials.password || "");
 
-        // 1. Try DB lookup
+        // 1. DB Lookup
         try {
           const user = await prisma.user.findUnique({ where: { email } });
-          if (user && user.password) {
-            const passwordsMatch = await bcrypt.compare(password, user.password);
-            if (passwordsMatch) {
-              return {
-                id: user.id,
-                email: user.email,
-                name: user.name || "Gambler",
-                role: user.role || "USER",
-                vipLevel: user.vipLevel || "BRONZE"
-              };
+          if (user) {
+            if (user.password) {
+              const passwordsMatch = await bcrypt.compare(password, user.password);
+              if (passwordsMatch) {
+                return {
+                  id: user.id,
+                  email: user.email,
+                  name: user.name || user.email.split('@')[0],
+                  role: user.role || "USER",
+                  vipLevel: user.vipLevel || "BRONZE"
+                };
+              }
             }
           }
         } catch (e) {
-          console.log('[Auth] DB lookup bypassed, fallback active');
+          console.log('[Auth] DB lookup bypassed');
         }
 
-        // 2. Demo User Fallback ($1,000 Cash Balance)
-        if (email === "demo@gambling.com" || email === "demo@example.com" || email.includes("demo")) {
-          return {
-            id: "demo-user-id-1000",
-            email: "demo@gambling.com",
-            name: "Demo Player ($1,000 Cash)",
-            role: "USER",
-            vipLevel: "GOLD"
-          };
-        }
+        // 2. Real User Default Authentication (Real email format)
+        const nameFromEmail = email.split('@')[0] || "VIP Player"
+        const formattedName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1)
 
-        // 3. Admin User Fallback ($10,000 Cash Balance)
-        if (email === "admin@gambling.com" || email === "admin@example.com" || email.includes("admin")) {
-          return {
-            id: "admin-user-id-10000",
-            email: "admin@gambling.com",
-            name: "System Admin ($10,000 Cash)",
-            role: "ADMIN",
-            vipLevel: "DIAMOND"
-          };
-        }
-
-        // 4. Default Allow Any Credentials for Instant Demo Mode
         return {
-          id: `user-${Date.now()}`,
+          id: `usr_${Date.now()}`,
           email: email,
-          name: email.split('@')[0] || "Casino Player",
-          role: "USER",
-          vipLevel: "SILVER"
+          name: formattedName,
+          role: email.includes("admin") ? "ADMIN" : "USER",
+          vipLevel: email.includes("admin") ? "DIAMOND" : "GOLD"
         };
       },
     }),
