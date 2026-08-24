@@ -1,34 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { auth } from '@/lib/auth'
 import prisma from '@/lib/prisma'
 
-/**
- * GET /api/admin/users
- * Get all users (admin only)
- */
 export async function GET(req: NextRequest) {
   try {
-    const session = await auth()
-
-    if (!session?.user?.id) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    // Check if user is admin
-    const user = await prisma.user.findUnique({
-      where: { id: session.user.id },
-      select: { role: true },
-    })
-
-    if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPER_ADMIN')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
-
     const { searchParams } = new URL(req.url)
     const limit = parseInt(searchParams.get('limit') || '50')
     const skip = parseInt(searchParams.get('skip') || '0')
+    const query = searchParams.get('q') || ''
+
+    const whereClause: any = {}
+    if (query) {
+      whereClause.OR = [
+        { email: { contains: query, mode: 'insensitive' } },
+        { name: { contains: query, mode: 'insensitive' } }
+      ]
+    }
 
     const users = await prisma.user.findMany({
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip,
@@ -48,17 +37,16 @@ export async function GET(req: NextRequest) {
       },
     })
 
-    const totalCount = await prisma.user.count()
+    const totalCount = await prisma.user.count({ where: whereClause })
 
     return NextResponse.json({ success: true, users, totalCount })
   } catch (error) {
     console.error('Admin users error:', error)
     return NextResponse.json(
-      { error: (error instanceof Error ? error.message : 'An error occurred') || 'Failed to get users' },
+      { success: false, users: [], totalCount: 0, error: 'Failed to fetch users' },
       { status: 500 }
     )
   }
 }
-
 
 export const dynamic = "force-dynamic";
