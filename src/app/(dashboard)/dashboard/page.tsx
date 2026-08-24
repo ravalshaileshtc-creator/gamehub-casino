@@ -7,9 +7,21 @@ import {
 } from 'lucide-react'
 import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
+import { useSession } from 'next-auth/react'
+import { useEffect, useState } from 'react'
 
 export default function DashboardPage() {
   const { balance } = useWallet()
+  const { data: session } = useSession()
+  const [userName, setUserName] = useState<string>("VIP Player")
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedName = localStorage.getItem("user_name")
+      if (session?.user?.name) setUserName(session.user.name)
+      else if (storedName) setUserName(storedName)
+    }
+  }, [session])
 
   const popularGames = [
     {
@@ -101,9 +113,9 @@ export default function DashboardPage() {
           <div>
             <p className="text-[10px] text-gray-400 font-semibold">Welcome back,</p>
             <div className="flex items-center gap-1.5">
-              <h3 className="text-base font-extrabold text-white">PlayerOne</h3>
+              <h3 className="text-base font-extrabold text-white">{userName}</h3>
               <span className="bg-[#4c1d95] text-white text-[9px] font-black px-1.5 py-0.5 rounded uppercase">
-                VIP 5
+                VIP GOLD
               </span>
             </div>
             <p className="text-[9px] text-gray-500 font-mono">UID: PZ458796</p>

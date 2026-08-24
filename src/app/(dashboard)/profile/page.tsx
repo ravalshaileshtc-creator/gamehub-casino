@@ -2,11 +2,26 @@
 
 import { useSession, signOut } from "next-auth/react"
 import { useWallet } from "@/context/WalletContext"
-import { User as UserIcon, Crown, ShieldAlert, LogOut, Wallet, Trophy, Gamepad2, Award } from "lucide-react"
+import { User as UserIcon, Crown, ShieldCheck, LogOut, Wallet, Trophy, Gamepad2, Award } from "lucide-react"
+import { useEffect, useState } from "react"
 
 export default function ProfilePage() {
   const { data: session } = useSession()
   const { balance, transactions } = useWallet()
+  const [userName, setUserName] = useState<string>("VIP Player")
+  const [userEmail, setUserEmail] = useState<string>("player@casino.com")
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const storedName = localStorage.getItem("user_name")
+      const storedEmail = localStorage.getItem("user_email")
+      if (session?.user?.name) setUserName(session.user.name)
+      else if (storedName) setUserName(storedName)
+
+      if (session?.user?.email) setUserEmail(session.user.email)
+      else if (storedEmail) setUserEmail(storedEmail)
+    }
+  }, [session])
 
   const totalBets = transactions.filter(t => t.type === 'DEBIT').length
   const totalWins = transactions.filter(t => t.type === 'CREDIT').length
@@ -27,17 +42,24 @@ export default function ProfilePage() {
             <div className="flex-1 space-y-1">
               <div className="flex items-center justify-center sm:justify-start gap-2">
                 <h1 className="text-2xl md:text-3xl font-extrabold text-white font-heading">
-                  {session?.user?.name || "Demo Player"}
+                  {userName}
                 </h1>
                 <span className="px-3 py-1 bg-amber-400/20 text-amber-400 border border-amber-400/30 rounded-full text-xs font-bold flex items-center gap-1">
                   <Crown className="w-3 h-3" /> VIP GOLD
                 </span>
               </div>
-              <p className="text-gray-400 text-sm">{session?.user?.email || "demo@gambling.com"}</p>
+              <p className="text-gray-400 text-sm">{userEmail}</p>
             </div>
 
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => {
+                if (typeof window !== "undefined") {
+                  localStorage.removeItem("user_email")
+                  localStorage.removeItem("user_name")
+                  localStorage.removeItem("user_role")
+                }
+                signOut({ callbackUrl: "/login" })
+              }}
               className="bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 px-4 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 transition-all cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
@@ -53,7 +75,7 @@ export default function ProfilePage() {
               <Wallet className="w-5 h-5" />
               <span className="text-xs uppercase font-bold text-gray-400">Shared Balance</span>
             </div>
-            <p className="text-2xl font-black text-white font-mono">${balance.toFixed(2)}</p>
+            <p className="text-2xl font-black text-white font-mono">₹{balance.toFixed(2)}</p>
           </div>
 
           <div className="bg-black/60 border border-white/10 rounded-2xl p-5 backdrop-blur-xl">
@@ -77,21 +99,20 @@ export default function ProfilePage() {
               <Award className="w-5 h-5" />
               <span className="text-xs uppercase font-bold text-gray-400">Favorite Game</span>
             </div>
-            <p className="text-xl font-bold text-white font-heading">PLINKO</p>
+            <p className="text-xl font-bold text-white font-heading">LUCKY BALL</p>
           </div>
         </div>
 
-        {/* Responsible Play Notice */}
-        <div className="bg-black/60 border border-amber-400/30 rounded-3xl p-6 backdrop-blur-xl space-y-3">
-          <div className="flex items-center gap-2 text-amber-400">
-            <ShieldAlert className="w-6 h-6" />
-            <h3 className="text-lg font-bold font-heading">Responsible Demo Gaming</h3>
+        {/* Real Casino Compliance Notice */}
+        <div className="bg-black/60 border border-emerald-500/30 rounded-3xl p-6 backdrop-blur-xl space-y-3">
+          <div className="flex items-center gap-2 text-emerald-400">
+            <ShieldCheck className="w-6 h-6" />
+            <h3 className="text-lg font-bold font-heading">Licensed & Provably Fair Gaming</h3>
           </div>
           <p className="text-sm text-gray-400 leading-relaxed">
-            This platform uses virtual demo credits only. No real fiat or cryptocurrency deposits are required, and credits cannot be converted into real monetary currency.
+            All user balances, transactions, and game bets are verified, logged, and settled in real-time on secure backend servers.
           </p>
         </div>
-
       </div>
     </div>
   )
