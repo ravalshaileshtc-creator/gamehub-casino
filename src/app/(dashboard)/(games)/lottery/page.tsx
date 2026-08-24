@@ -425,6 +425,32 @@ export default function RealisticLuckyBallGame() {
 
       setRoundId(currentRoundId)
 
+      // Calculate Target Winning Ball for the current round
+      let winBallToUse = getGlobalRoundWinningNumber(currentRoundId)
+
+      if (adminConfig) {
+        if (adminConfig.mode === 'FORCED') {
+          winBallToUse = adminConfig.forcedNumber
+        } else if (adminConfig.mode === 'HOUSE_MAX_PROFIT') {
+          let minPayout = Infinity
+          let bestBall = 0
+          for (let testNum = 0; testNum <= 9; testNum++) {
+            let testPayout = 0
+            myBets.forEach(b => {
+              if (b.betType === 'SINGLE' && b.selectedNumber === testNum) testPayout += b.amount * 9
+              else if (b.betType === 'RANGE_1_5' && testNum >= 1 && testNum <= 5) testPayout += b.amount * 1.8
+              else if (b.betType === 'RANGE_6_9' && testNum >= 6 && testNum <= 9) testPayout += b.amount * 2.25
+              else if (b.betType === 'ZERO_FIVE' && (testNum === 0 || testNum === 5)) testPayout += b.amount * 4.5
+            })
+            if (testPayout < minPayout) {
+              minPayout = testPayout
+              bestBall = testNum
+            }
+          }
+          winBallToUse = bestBall
+        }
+      }
+
       if (cycleSec < 30) {
         // BETTING Phase (30s to 1s)
         const remain = 30 - cycleSec
@@ -441,6 +467,7 @@ export default function RealisticLuckyBallGame() {
         const remain = 35 - cycleSec
         if (phase !== 'DRAWING') {
           setPhase('DRAWING')
+          setWinningNumber(winBallToUse)
           haptics.medium()
           if (soundEnabled) playSound('suction')
         }
@@ -448,31 +475,6 @@ export default function RealisticLuckyBallGame() {
       } else {
         // RESULT Phase (5s)
         const remain = 40 - cycleSec
-
-        let winBallToUse = getGlobalRoundWinningNumber(currentRoundId)
-
-        if (adminConfig) {
-          if (adminConfig.mode === 'FORCED') {
-            winBallToUse = adminConfig.forcedNumber
-          } else if (adminConfig.mode === 'HOUSE_MAX_PROFIT') {
-            let minPayout = Infinity
-            let bestBall = 0
-            for (let testNum = 0; testNum <= 9; testNum++) {
-              let testPayout = 0
-              myBets.forEach(b => {
-                if (b.betType === 'SINGLE' && b.selectedNumber === testNum) testPayout += b.amount * 9
-                else if (b.betType === 'RANGE_1_5' && testNum >= 1 && testNum <= 5) testPayout += b.amount * 1.8
-                else if (b.betType === 'RANGE_6_9' && testNum >= 6 && testNum <= 9) testPayout += b.amount * 2.25
-                else if (b.betType === 'ZERO_FIVE' && (testNum === 0 || testNum === 5)) testPayout += b.amount * 4.5
-              })
-              if (testPayout < minPayout) {
-                minPayout = testPayout
-                bestBall = testNum
-              }
-            }
-            winBallToUse = bestBall
-          }
-        }
 
         if (phase !== 'RESULT') {
           setPhase('RESULT')
