@@ -155,6 +155,18 @@ export default function RealisticLuckyBallGame() {
     ballsRef.current = balls
   }, [])
 
+  const extractionAnimRef = useRef<{
+    targetNum: number | null
+    progress: number
+    particles: Array<{ x: number; y: number; vx: number; vy: number; radius: number; alpha: number; color: string }>
+    burstDone: boolean
+  }>({
+    targetNum: null,
+    progress: 0,
+    particles: [],
+    burstDone: false
+  })
+
   // 60 FPS HTML5 Canvas Physics & Rendering Engine
   const drawMachine = useCallback((isDrawing: boolean, drawnNum: number | null) => {
     const canvas = canvasRef.current
@@ -180,6 +192,26 @@ export default function RealisticLuckyBallGame() {
     const radius = size * 0.41
 
     ctx.clearRect(0, 0, size, size)
+
+    // Update Extraction Progress State
+    const animState = extractionAnimRef.current
+    if (drawnNum === null) {
+      animState.targetNum = null
+      animState.progress = 0
+      animState.burstDone = false
+      animState.particles = []
+    } else {
+      if (animState.targetNum !== drawnNum) {
+        animState.targetNum = drawnNum
+        animState.progress = 0
+        animState.burstDone = false
+        animState.particles = []
+      } else if (animState.progress < 1.0) {
+        animState.progress = Math.min(1.0, animState.progress + 0.02)
+      }
+    }
+
+    const currentP = animState.progress
 
     // 1. Draw Machine Metallic Base & Stand
     ctx.save()
@@ -245,16 +277,10 @@ export default function RealisticLuckyBallGame() {
         const minDist = b1.radius + b2.radius
 
         if (dist < minDist && dist > 0) {
-          // Play subtle clink sound on high-velocity collision
-          const relVel = Math.abs(b1.vx - b2.vx) + Math.abs(b1.vy - b2.vy)
-          if (relVel > 3.0 && soundEnabled && Math.random() < 0.15) {
-            playSound('clink')
-          }
+          if (b1.num === drawnNum || b2.num === drawnNum) continue
 
-          // Normal vector
           const nx = dx / dist
           const ny = dy / dist
-          // Relative velocity
           const kx = b1.vx - b2.vx
           const ky = b1.vy - b2.vy
           const p = 2 * (nx * kx + ny * ky) / 2
@@ -264,7 +290,6 @@ export default function RealisticLuckyBallGame() {
           b2.vx += p * nx
           b2.vy += p * ny
 
-          // Separate overlapping balls
           const overlap = 0.5 * (minDist - dist)
           b1.x -= overlap * nx
           b1.y -= overlap * ny
@@ -274,16 +299,15 @@ export default function RealisticLuckyBallGame() {
       }
     }
 
-    // Update Position & Render Each Ball (0-9)
+    // Render non-target balls or target ball if not extracting
     for (let i = 0; i < balls.length; i++) {
       const b = balls[i]
+      if (drawnNum !== null && b.num === drawnNum) continue // Rendered via Vortex Suction Animation below
 
-      // Pneumatic Swirl Force
       b.x += b.vx * speedMult
       b.y += b.vy * speedMult
       b.angle += b.va * speedMult
 
-      // Boundary Collisions inside Sphere
       const dx = b.x - cx
       const dy = b.y - cy
       const dist = Math.sqrt(dx * dx + dy * dy)
@@ -299,25 +323,22 @@ export default function RealisticLuckyBallGame() {
         b.y = cy + ny * (radius - 3 - b.radius)
       }
 
-      // Render 3D Metallic Glossy Ball
       const mainColor = getBallColor(b.num)
 
       ctx.save()
       ctx.translate(b.x, b.y)
       ctx.rotate(b.angle)
 
-      // Outer Drop Shadow
       ctx.beginPath()
       ctx.arc(0, 0, b.radius, 0, Math.PI * 2)
       ctx.shadowColor = mainColor
       ctx.shadowBlur = 10
       ctx.shadowOffsetY = 2
 
-      // Layered 3D Radial Sphere Gradient
       const ballGrad = ctx.createRadialGradient(-b.radius * 0.35, -b.radius * 0.35, 1, 0, 0, b.radius)
-      ballGrad.addColorStop(0, '#FFFFFF') // Pure Specular Highlight Spot
+      ballGrad.addColorStop(0, '#FFFFFF')
       ballGrad.addColorStop(0.3, mainColor)
-      ballGrad.addColorStop(0.85, mainColor === '#2D8CFF' ? '#0D3B7A' : '#7A3200') // Dark Metallic Base
+      ballGrad.addColorStop(0.85, mainColor === '#2D8CFF' ? '#0D3B7A' : '#7A3200')
       ballGrad.addColorStop(1, '#05070D')
       
       ctx.fillStyle = ballGrad
@@ -326,17 +347,11 @@ export default function RealisticLuckyBallGame() {
       ctx.lineWidth = 1
       ctx.stroke()
 
-      // White Center Emblem Badge (Pool Ball Style)
       ctx.beginPath()
       ctx.arc(0, 0, b.radius * 0.58, 0, Math.PI * 2)
       ctx.fillStyle = '#FFFFFF'
-      ctx.shadowBlur = 0
       ctx.fill()
-      ctx.strokeStyle = 'rgba(0,0,0,0.15)'
-      ctx.lineWidth = 0.8
-      ctx.stroke()
 
-      // Bold Centered Black Number (Never Disappears)
       ctx.fillStyle = '#090C15'
       ctx.font = '900 11px sans-serif'
       ctx.textAlign = 'center'
@@ -346,14 +361,114 @@ export default function RealisticLuckyBallGame() {
       ctx.restore()
     }
 
-    // 5. Draw Winning Ball in Top Chute Spotlight
+    // 5. HIGH-SPEED 3D VORTEX EXTRACTION & SPOTLIGHT BOUNCE ANIMATION
     if (drawnNum !== null) {
       const winColor = getBallColor(drawnNum)
+      let bx = cx
+      let by = cy
+      let ballScale = 1
+      let ballRotation = 0
+
+      if (currentP < 0.45) {
+        // STAGE 1: Pneumatic Spiral Vortex Suction Trajectory (0% - 45%)
+        const pStage = currentP / 0.45
+        const spiralAngle = pStage * Math.PI * 8
+        const spiralRadius = (1 - pStage) * (radius * 0.55)
+        
+        bx = cx + Math.cos(spiralAngle) * spiralRadius
+        by = (cy + radius * 0.3) - pStage * (radius * 1.2)
+        ballRotation = spiralAngle
+        ballScale = 0.85 + pStage * 0.25
+
+        // Emit Golden Spiral Particles
+        if (Math.random() < 0.8) {
+          animState.particles.push({
+            x: bx + (Math.random() - 0.5) * 8,
+            y: by + (Math.random() - 0.5) * 8,
+            vx: (Math.random() - 0.5) * 2,
+            vy: Math.random() * 2 + 1,
+            radius: Math.random() * 3 + 1.5,
+            alpha: 1,
+            color: '#F7B500'
+          })
+        }
+
+      } else if (currentP < 0.70) {
+        // STAGE 2: High-Velocity Suction Chute Tube Ascent (45% - 70%)
+        const pStage = (currentP - 0.45) / 0.25
+        bx = cx
+        by = (cy - radius + 15) - pStage * 35
+        ballScale = 1.1
+        ballRotation = pStage * Math.PI * 4
+
+        // Tube Streak Glow Effect
+        ctx.save()
+        ctx.strokeStyle = 'rgba(247, 181, 0, 0.8)'
+        ctx.lineWidth = 16
+        ctx.lineCap = 'round'
+        ctx.beginPath()
+        ctx.moveTo(cx, cy - radius + 15)
+        ctx.lineTo(cx, by)
+        ctx.stroke()
+        ctx.restore()
+
+      } else {
+        // STAGE 3: Spotlight Elastic Bounce & Pedestal Lock (70% - 100%)
+        const pStage = (currentP - 0.70) / 0.30
+        const wy = cy - radius - 10
+        const bounceHeight = Math.abs(Math.sin(pStage * Math.PI * 2.5)) * 14 * (1 - pStage)
+        
+        bx = cx
+        by = wy - bounceHeight
+        ballScale = 1 + Math.sin(pStage * Math.PI) * 0.2
+        ballRotation = (1 - pStage) * Math.PI * 2
+
+        // Burst Confetti Sparkles when locked
+        if (currentP >= 0.98 && !animState.burstDone) {
+          animState.burstDone = true
+          for (let pCount = 0; pCount < 25; pCount++) {
+            const pAngle = Math.random() * Math.PI * 2
+            const pSpeed = Math.random() * 5 + 2
+            animState.particles.push({
+              x: cx,
+              y: wy,
+              vx: Math.cos(pAngle) * pSpeed,
+              vy: Math.sin(pAngle) * pSpeed,
+              radius: Math.random() * 4 + 2,
+              alpha: 1,
+              color: Math.random() > 0.4 ? '#F7B500' : '#FFFFFF'
+            })
+          }
+        }
+      }
+
+      // Render Active Spiral Trail Particles
+      for (let pIdx = animState.particles.length - 1; pIdx >= 0; pIdx--) {
+        const pt = animState.particles[pIdx]
+        pt.x += pt.vx
+        pt.y += pt.vy
+        pt.alpha -= 0.04
+
+        if (pt.alpha <= 0) {
+          animState.particles.splice(pIdx, 1)
+          continue
+        }
+
+        ctx.save()
+        ctx.globalAlpha = pt.alpha
+        ctx.fillStyle = pt.color
+        ctx.shadowColor = pt.color
+        ctx.shadowBlur = 8
+        ctx.beginPath()
+        ctx.arc(pt.x, pt.y, pt.radius, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+
+      // Render Spotlight Cone Beam behind Winning Ball
       const wx = cx
       const wy = cy - radius - 10
-
       ctx.save()
-      // Spotlight Glow Beam
       ctx.beginPath()
       ctx.moveTo(wx - 25, wy - 30)
       ctx.lineTo(wx + 25, wy - 30)
@@ -361,15 +476,21 @@ export default function RealisticLuckyBallGame() {
       ctx.lineTo(wx - 40, wy + 40)
       ctx.closePath()
       const spotGrad = ctx.createLinearGradient(wx, wy - 30, wx, wy + 40)
-      spotGrad.addColorStop(0, 'rgba(247, 181, 0, 0.6)')
+      spotGrad.addColorStop(0, 'rgba(247, 181, 0, 0.7)')
       spotGrad.addColorStop(1, 'rgba(247, 181, 0, 0)')
       ctx.fillStyle = spotGrad
       ctx.fill()
+      ctx.restore()
 
-      // 3D Winning Ball in Tube
+      // Render 3D Extracting Winning Ball
+      ctx.save()
+      ctx.translate(bx, by)
+      ctx.scale(ballScale, ballScale)
+      ctx.rotate(ballRotation)
+
       ctx.beginPath()
-      ctx.arc(wx, wy, 17, 0, Math.PI * 2)
-      const wGrad = ctx.createRadialGradient(wx - 6, wy - 6, 2, wx, wy, 17)
+      ctx.arc(0, 0, 17, 0, Math.PI * 2)
+      const wGrad = ctx.createRadialGradient(-6, -6, 2, 0, 0, 17)
       wGrad.addColorStop(0, '#FFFFFF')
       wGrad.addColorStop(0.35, winColor)
       wGrad.addColorStop(0.9, winColor === '#2D8CFF' ? '#0D3B7A' : '#7A3200')
@@ -377,7 +498,7 @@ export default function RealisticLuckyBallGame() {
 
       ctx.fillStyle = wGrad
       ctx.shadowColor = '#F7B500'
-      ctx.shadowBlur = 28
+      ctx.shadowBlur = 30
       ctx.fill()
       ctx.strokeStyle = '#F7B500'
       ctx.lineWidth = 2.5
@@ -385,16 +506,16 @@ export default function RealisticLuckyBallGame() {
 
       // White Badge
       ctx.beginPath()
-      ctx.arc(wx, wy, 10, 0, Math.PI * 2)
+      ctx.arc(0, 0, 10, 0, Math.PI * 2)
       ctx.fillStyle = '#FFFFFF'
       ctx.fill()
 
-      // Number
+      // Centered Number (Never Disappears)
       ctx.fillStyle = '#090C15'
       ctx.font = '900 13px sans-serif'
       ctx.textAlign = 'center'
       ctx.textBaseline = 'middle'
-      ctx.fillText(drawnNum.toString(), wx, wy + 0.5)
+      ctx.fillText(drawnNum.toString(), 0, 0.5)
 
       ctx.restore()
     }
