@@ -28,17 +28,6 @@ export default NextAuth(authConfig).auth(async (req) => {
     }
   }
 
-  // 2. Auth Cookie Check (NextAuth OR custom auth cookie)
-  const hasAuthCookie = req.cookies.has("auth_session") || req.cookies.has("next-auth.session-token") || req.cookies.has("__Secure-next-auth.session-token")
-  const hasAuth = isLoggedIn || hasAuthCookie
-
-  const isAuthPage = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/register")
-
-  // Protect sensitive dashboard/admin routes if no auth cookie or session
-  if (!hasAuth && (nextUrl.pathname.startsWith("/dashboard") || nextUrl.pathname.startsWith("/admin"))) {
-    return NextResponse.redirect(new URL("/login", nextUrl))
-  }
-
   return NextResponse.next()
 })
 
