@@ -22,17 +22,20 @@ export function LoginForm() {
   const [error, setError] = useState("")
   const [showPassword, setShowPassword] = useState(false)
 
-  const syncUserToFirebase = async (userEmail: string) => {
+  const syncUserToFirebase = (userEmail: string) => {
     try {
       const docId = userEmail.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, "_")
       const userRef = doc(db, "users", docId)
-      await setDoc(userRef, {
-        email: userEmail,
-        lastLoginAt: new Date().toISOString(),
-        platform: "GameHub Android/Web APK",
-        status: "ACTIVE",
-        role: "PLAYER"
-      }, { merge: true })
+      Promise.race([
+        setDoc(userRef, {
+          email: userEmail,
+          lastLoginAt: new Date().toISOString(),
+          platform: "GameHub Android/Web APK",
+          status: "ACTIVE",
+          role: "PLAYER"
+        }, { merge: true }),
+        new Promise((resolve) => setTimeout(resolve, 1500))
+      ]).catch(() => {})
     } catch (err) {
       console.warn("Firebase Firestore Sync Note:", err)
     }
@@ -44,7 +47,7 @@ export function LoginForm() {
     setError("")
 
     try {
-      await syncUserToFirebase(email)
+      syncUserToFirebase(email)
 
       const result = await signIn("credentials", {
         redirect: false,

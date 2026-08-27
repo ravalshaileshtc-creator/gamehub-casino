@@ -27,17 +27,26 @@ export function RegisterForm() {
     setError("")
 
     try {
-      const docId = email.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, "_")
-      const userRef = doc(db, "users", docId)
-      await setDoc(userRef, {
-        name,
-        email,
-        createdAt: new Date().toISOString(),
-        platform: "GameHub Android/Web APK",
-        status: "ACTIVE",
-        role: "PLAYER"
-      }, { merge: true })
+      // 1. Non-blocking Async Firebase Firestore Sync
+      try {
+        const docId = email.toLowerCase().trim().replace(/[^a-zA-Z0-9]/g, "_")
+        const userRef = doc(db, "users", docId)
+        Promise.race([
+          setDoc(userRef, {
+            name,
+            email,
+            createdAt: new Date().toISOString(),
+            platform: "GameHub Android/Web APK",
+            status: "ACTIVE",
+            role: "PLAYER"
+          }, { merge: true }),
+          new Promise((resolve) => setTimeout(resolve, 1500))
+        ]).catch(() => {})
+      } catch (fErr) {
+        console.warn("Firestore background sync:", fErr)
+      }
 
+      // 2. Direct Auth Register API Call
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -45,9 +54,14 @@ export function RegisterForm() {
       })
 
       if (response.ok) {
-        router.push("/login")
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('user_email', email)
+          localStorage.setItem('user_name', name || email.split('@')[0])
+          document.cookie = "auth_session=true; path=/; max-age=864000"
+        }
+        router.push("/dashboard")
       } else {
-        const data = await response.json()
+        const data = await response.json().catch(() => ({}))
         setError(data.message || "Registration failed")
       }
     } catch {
