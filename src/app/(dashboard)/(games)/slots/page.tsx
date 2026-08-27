@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Cherry, Apple, Grape, Gem, Zap } from 'lucide-react'
 import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
+import { useGameAdminControl } from '@/hooks/useGameAdminControl'
+import { GameMaintenanceOverlay } from '@/components/ui/GameMaintenanceOverlay'
 
 const SYMBOLS = [
   { icon: Cherry, color: 'text-red-400', name: 'cherry' },
@@ -24,6 +26,8 @@ interface SlotsResult {
 
 export default function SlotsGame() {
   const { balance, debit, credit, addDemoCoins } = useWallet()
+  const adminSettings = useGameAdminControl('slots')
+
   const [wager, setWager] = useState(10)
   const [spinning, setSpinning] = useState(false)
   const [reels, setReels] = useState([0, 0, 0])
@@ -43,6 +47,10 @@ export default function SlotsGame() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="Slots 777 Vegas" />
+  }
 
   const spinReels = async () => {
     if (wager <= 0 || spinning) return

@@ -12,6 +12,8 @@ import { getMultipliers, PlinkoRisk } from "@/lib/plinko"
 import Matter from "matter-js"
 import { useWallet } from "@/context/WalletContext"
 import { Flame, Pause, Zap, Volume2, VolumeX, RefreshCw } from "lucide-react"
+import { useGameAdminControl } from "@/hooks/useGameAdminControl"
+import { GameMaintenanceOverlay } from "@/components/ui/GameMaintenanceOverlay"
 
 interface Particle {
   x: number
@@ -515,6 +517,12 @@ export default function PlinkoGame() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  const adminSettings = useGameAdminControl('plinko')
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="Plinko Peg Drop" />
+  }
 
   return (
     <div className="h-full w-full overflow-hidden flex flex-col justify-between p-1 text-white gap-2 max-w-lg mx-auto">

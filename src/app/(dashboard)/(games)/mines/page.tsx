@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Bomb, Gem, Play, Sparkles, RefreshCw } from 'lucide-react'
 import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
+import { useGameAdminControl } from '@/hooks/useGameAdminControl'
+import { GameMaintenanceOverlay } from '@/components/ui/GameMaintenanceOverlay'
 
 interface MinesResult {
   isWin: boolean
@@ -15,6 +17,8 @@ interface MinesResult {
 
 export default function MinesGame() {
   const { balance, debit, credit, addDemoCoins } = useWallet()
+  const adminSettings = useGameAdminControl('mines')
+
   const [wager, setWager] = useState(10)
   const [mineCount, setMineCount] = useState(3)
   const [playing, setPlaying] = useState(false)
@@ -39,6 +43,10 @@ export default function MinesGame() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="Minesweeper Treasure" />
+  }
 
   const startGame = async () => {
     if (wager <= 0 || playing) return

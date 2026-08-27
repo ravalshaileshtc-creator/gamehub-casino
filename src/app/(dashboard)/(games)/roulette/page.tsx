@@ -7,6 +7,8 @@ import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
 import { playSound } from '@/lib/sounds'
 import { motion, AnimatePresence } from 'framer-motion'
+import { useGameAdminControl } from '@/hooks/useGameAdminControl'
+import { GameMaintenanceOverlay } from '@/components/ui/GameMaintenanceOverlay'
 
 // Authentic European Roulette Wheel Order (37 pockets)
 const ROULETTE_POCKETS = [
@@ -78,6 +80,12 @@ export default function EuropeanRouletteGame() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  const adminSettings = useGameAdminControl('roulette')
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="European Roulette 36" />
+  }
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animRef = useRef<number | null>(null)

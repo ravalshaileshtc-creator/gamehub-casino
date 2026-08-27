@@ -6,6 +6,8 @@ import { ArrowLeft, Minus, Plus, Rocket, Zap, Sparkles, CheckCircle2 } from 'luc
 import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
 import { playSound } from '@/lib/sounds'
+import { useGameAdminControl } from '@/hooks/useGameAdminControl'
+import { GameMaintenanceOverlay } from '@/components/ui/GameMaintenanceOverlay'
 
 type GameState = 'PREPARING' | 'FLYING' | 'CRASHED'
 
@@ -28,6 +30,7 @@ interface Particle {
 
 export default function CrashPage() {
   const { balance, debit, credit, addDemoCoins } = useWallet()
+  const adminSettings = useGameAdminControl('crash')
 
   // Game Engine State
   const [gameState, setGameState] = useState<GameState>('PREPARING')
@@ -48,6 +51,10 @@ export default function CrashPage() {
     }, 1000)
     return () => clearInterval(timer)
   }, [])
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="Crash Rocket Multiplier" />
+  }
 
   // Wager & Bet State
   const [betAmount, setBetAmount] = useState<number>(100)

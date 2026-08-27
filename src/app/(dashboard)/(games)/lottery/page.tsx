@@ -6,6 +6,8 @@ import { ArrowLeft, Volume2, VolumeX, Minus, Plus, Trophy, Sparkles, RefreshCw, 
 import { useWallet } from '@/context/WalletContext'
 import { haptics } from '@/lib/haptics'
 import { playSound } from '@/lib/sounds'
+import { useGameAdminControl } from '@/hooks/useGameAdminControl'
+import { GameMaintenanceOverlay } from '@/components/ui/GameMaintenanceOverlay'
 import { motion, AnimatePresence } from 'framer-motion'
 import { db } from '@/lib/firebase'
 import { doc, setDoc, onSnapshot } from 'firebase/firestore'
@@ -65,6 +67,7 @@ type RoundPhase = 'BETTING' | 'DRAWING' | 'RESULT'
 
 export default function RealisticLuckyBallGame() {
   const { balance, debit, credit, addDemoCoins } = useWallet()
+  const adminSettings = useGameAdminControl('luckyball')
 
   // Master Game State
   const [roundId, setRoundId] = useState(9105)
@@ -827,6 +830,10 @@ export default function RealisticLuckyBallGame() {
   }
 
   const currentConfig = BET_TYPES_CONFIG[selectedBetType]
+
+  if (!adminSettings.enabled) {
+    return <GameMaintenanceOverlay gameName="Lucky Ball (0-9)" />
+  }
 
   return (
     <div className="h-full w-full overflow-hidden flex flex-col justify-between p-1.5 select-none text-white max-w-lg mx-auto bg-[#090C15]">
