@@ -748,15 +748,11 @@ export default function RealisticLuckyBallGame() {
   // Place Bet
   const placeBet = async () => {
     if (phase !== 'BETTING' || timeLeft <= 5 || isBetLocked) return
-    if (wager <= 0) return
+    if (wager <= 0 || balance < wager) return
 
     setIsBetLocked(true)
     haptics.medium()
     if (soundEnabled) playSound('chip')
-
-    if (balance < wager) {
-      addDemoCoins(1000)
-    }
 
     const success = await debit(wager, 'LUCKY_BALL')
     if (!success) {

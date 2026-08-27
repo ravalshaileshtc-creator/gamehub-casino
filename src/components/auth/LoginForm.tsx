@@ -106,16 +106,6 @@ export function LoginForm() {
       linkHref="/register"
       linkLabel="Sign up"
     >
-      {/* Quick Demo Login Banner Button */}
-      <Button 
-        type="button"
-        onClick={handleDemoLogin}
-        disabled={isLoading}
-        className="w-full h-14 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 hover:from-emerald-400 hover:to-cyan-400 text-black font-extrabold text-base shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/40 transition-all duration-300 rounded-xl mb-4 flex items-center justify-center gap-2 border border-emerald-300/30 cursor-pointer"
-      >
-        <Zap className="w-5 h-5 fill-current" />
-        <span>1-CLICK DEMO LOGIN ($1,000 CASH)</span>
-      </Button>
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="space-y-2">

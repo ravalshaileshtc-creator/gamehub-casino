@@ -53,12 +53,8 @@ export default function SlotsGame() {
   }
 
   const spinReels = async () => {
-    if (wager <= 0 || spinning) return
+    if (wager <= 0 || spinning || balance < wager) return
     haptics.medium()
-
-    if (balance < wager) {
-      addDemoCoins(1000)
-    }
 
     const success = await debit(wager, 'SLOTS')
     if (!success) {

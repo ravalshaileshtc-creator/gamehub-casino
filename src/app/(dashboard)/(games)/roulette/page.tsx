@@ -247,14 +247,9 @@ export default function EuropeanRouletteGame() {
 
   // Spin European Roulette Wheel Physics Engine
   const spinWheel = async () => {
-    if (spinning) return
-
+    if (spinning || wager <= 0 || balance < wager) return
     haptics.medium()
     if (soundEnabled) playSound('coin')
-
-    if (balance < wager) {
-      addDemoCoins(1000)
-    }
 
     debit(wager, 'European Roulette')
     setSpinning(true)

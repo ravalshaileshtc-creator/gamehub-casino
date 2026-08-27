@@ -49,12 +49,8 @@ export default function MinesGame() {
   }
 
   const startGame = async () => {
-    if (wager <= 0 || playing) return
+    if (wager <= 0 || playing || balance < wager) return
     haptics.medium()
-
-    if (balance < wager) {
-      addDemoCoins(1000)
-    }
 
     const success = await debit(wager, 'MINES')
     if (!success) {
