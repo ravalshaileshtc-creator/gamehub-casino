@@ -57,6 +57,8 @@ export function RegisterForm() {
         if (typeof window !== 'undefined') {
           localStorage.setItem('user_email', email)
           localStorage.setItem('user_name', name || email.split('@')[0])
+          localStorage.setItem('hub_shared_wallet', '0.00')
+          localStorage.setItem('hub_wallet_tx', '[]')
           document.cookie = "auth_session=true; path=/; max-age=864000"
         }
         router.push("/dashboard")

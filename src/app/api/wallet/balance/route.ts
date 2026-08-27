@@ -19,22 +19,19 @@ export async function GET() {
       console.log('[Wallet Balance API] DB bypass fallback')
     }
 
-    // Demo/Offline Fallback balance
-    const isDemo = session.user.email?.includes('demo') ?? true
-    const mainBal = isDemo ? 1000.0 : 10000.0
-
+    // Default starting balance for users is ZERO (0.00)
     return NextResponse.json({
       success: true,
       wallet: {
-        mainBalance: mainBal,
-        bonusBalance: 250.0,
-        totalBalance: mainBal + 250.0
+        mainBalance: 0.0,
+        bonusBalance: 0.0,
+        totalBalance: 0.0
       }
     })
   } catch (error) {
     return NextResponse.json({
       success: true,
-      wallet: { mainBalance: 1000.0, bonusBalance: 250.0, totalBalance: 1250.0 }
+      wallet: { mainBalance: 0.0, bonusBalance: 0.0, totalBalance: 0.0 }
     })
   }
 }

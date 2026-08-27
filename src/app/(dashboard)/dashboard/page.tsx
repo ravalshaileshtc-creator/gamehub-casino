@@ -132,7 +132,7 @@ export default function DashboardPage() {
             ₹ {balance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </h2>
           <p className="text-[9px] text-emerald-400 font-mono font-bold">
-            Bonus Balance ₹ 2,400
+            Bonus Balance ₹ 0.00
           </p>
         </div>
       </section>
